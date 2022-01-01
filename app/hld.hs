@@ -1,7 +1,9 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 import Options.Applicative
+import GitHash
 
 data Options
   = GoLink
@@ -30,10 +32,16 @@ opts = info (optsGoLink <|> optsPrintType <|> optsPrintVersion <**> helper)
   <> header "hld - linker"
   )
 
-main' :: Options -> IO ()
-main' PrintType = putStrLn "PrintType"
-main' PrintVersion = putStrLn "PrintVersion"
-main' (GoLink inf outf) = putStrLn $ "GoLink " ++ inf ++ " " ++ outf
-
 main :: IO ()
 main = execParser opts >>= main'
+
+main' :: Options -> IO ()
+
+main' PrintVersion = putStrLn $ concat [giTag gi, " (", giBranch gi, "@", giHash gi, ")", dirty]
+  where
+    dirty = if giDirty gi then " dirty" else ""
+    gi = $$tGitInfoCwd
+
+main' PrintType = undefined
+
+main' (GoLink inf outf) = putStrLn $ "GoLink " ++ inf ++ " " ++ outf
