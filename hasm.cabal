@@ -49,6 +49,19 @@ library
     , template-haskell ==2.16.*
   default-language: Haskell2010
 
+executable hld
+  main-is: hld.hs
+  other-modules:
+      Paths_hasm
+  hs-source-dirs:
+      app
+  ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wno-redundant-constraints -fno-warn-unused-do-bind -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.6 && <5.0
+    , melf
+    , optparse-applicative >=0.16.1 && <0.17
+  default-language: Haskell2010
+
 test-suite exceptions
   type: exitcode-stdio-1.0
   main-is: Tests.hs

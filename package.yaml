@@ -48,3 +48,15 @@ tests:
       - tasty-hunit
       - hasm
       - melf
+
+executables:
+  hld:
+    main: hld.hs
+    source-dirs: app
+    ghc-options: -fno-warn-unused-do-bind -threaded -rtsopts -with-rtsopts=-N
+    dependencies:
+      - melf
+      - optparse-applicative >= 0.16.1 && < 0.17
+      # - binary
+      # - bytestring
+      # - prettyprinter
