@@ -58,7 +58,9 @@ executable hld
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wno-redundant-constraints -fno-warn-unused-do-bind -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.6 && <5.0
+    , bytestring
     , githash
+    , hasm
     , melf
     , optparse-applicative >=0.16.1 && <0.17
   default-language: Haskell2010

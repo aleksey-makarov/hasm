@@ -2,8 +2,13 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-import Options.Applicative
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BSL
+import Data.Elf
 import GitHash
+import Options.Applicative
+
+import Asm.DummyLd
 
 data Options
   = GoLink
@@ -44,4 +49,8 @@ main' PrintVersion = putStrLn $ concat [giTag gi, " (", giBranch gi, "@", giHash
 
 main' PrintType = undefined
 
-main' (GoLink inf outf) = putStrLn $ "GoLink " ++ inf ++ " " ++ outf
+main' (GoLink inf outf) = readFileStrict inf >>= parseElf >>= dummyLd >>= serializeElf >>= BSL.writeFile outf
+
+-- | Read the file strictly but return lazy bytestring
+readFileStrict :: FilePath -> IO BSL.ByteString
+readFileStrict path = BSL.fromStrict <$> BS.readFile path
