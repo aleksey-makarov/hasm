@@ -48,6 +48,8 @@ tests:
       - tasty-hunit
       - hasm
       - melf
+      - mtl
+      - process
 
 executables:
   hld:

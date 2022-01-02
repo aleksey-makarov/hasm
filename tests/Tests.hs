@@ -1,20 +1,19 @@
 module Main (main) where
 
-import Control.Monad.Fix
-import Control.Monad.Catch
+import Control.Monad.State as MS
 import Data.Bits
 import Data.ByteString.Lazy as BSL
 import System.FilePath
 import System.Posix.Files
+import System.Process
 import Test.Tasty
-import Test.Tasty.Golden
 import Test.Tasty.HUnit
 
 import Data.Elf
-import Data.Elf.PrettyPrint
 
-import Asm.DummyLd
 import Asm.AsmAArch64
+import Asm.DummyLd
+
 import Code.HelloWorld
 import Code.ForwardLabel
 
@@ -22,15 +21,6 @@ makeFileExecutable :: String -> IO ()
 makeFileExecutable path = do
     m <- fileMode <$> getFileStatus path
     setFileMode path $ m .|. ownerExecuteMode
-
-helloWorldExe :: MonadCatch m => m Elf
-helloWorldExe = assemble helloWorld >>= dummyLd
-
-forwardLabelExe :: (MonadCatch m, MonadFix m) => m Elf
-forwardLabelExe = assemble forwardLabel >>= dummyLd
-
-helloWorldObj :: MonadCatch m => m Elf
-helloWorldObj = assemble helloWorld
 
 fixTargetName :: String -> String
 fixTargetName = fmap f
@@ -44,25 +34,28 @@ writeElf path elf = do
     BSL.writeFile path e
     makeFileExecutable path
 
-testElf :: String -> IO Elf -> [ TestTree ]
-testElf elfFileName elf =
-    [ testCase makeTargetName (elf >>= writeElf f)
-    , after AllSucceed makeTargetName $ testGroup checkTargetName
-        [ goldenVsFile "dump"   (d <.> "golden") d (writeElfDump   f d)
-        , goldenVsFile "layout" (l <.> "golden") l (writeElfLayout f l)
-        ]
+testsOutDir :: FilePath
+testsOutDir = "tests" </> "out"
+
+runExe :: String -> IO String
+runExe elfFileName = readProcess "qemu-aarch64" [f] []
+    where
+        f = testsOutDir </> elfFileName
+
+testExe :: String -> StateT CodeState IO () -> String -> [ TestTree ]
+testExe elfFileName code expectedString =
+    [ testCase makeTargetName (assemble code >>= dummyLd >>= writeElf f)
+    , after AllSucceed makeTargetName $ testCase checkTargetName $ do
+        out <- runExe elfFileName
+        out @?= expectedString
     ]
     where
         makeTargetName  = "make_"  ++ fixTargetName elfFileName
         checkTargetName = "check_" ++ fixTargetName elfFileName
-        t = "examples"
-        f = t </> elfFileName
-        d = t </> elfFileName <.> "dump"
-        l = t </> elfFileName <.> "layout"
+        f = testsOutDir </> elfFileName
 
 main :: IO ()
 main = defaultMain $ testGroup "examples"
-    (  testElf "helloWorldObj.o" helloWorldObj
-    ++ testElf "helloWorldExe"   helloWorldExe
-    ++ testElf "forwardLabelExe" forwardLabelExe
+    (  testExe "helloWorld"   helloWorld   "Hello World!\n"
+    ++ testExe "forwardLabel" forwardLabel "ok\n"
     )

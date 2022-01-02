@@ -80,6 +80,8 @@ test-suite exceptions
     , filepath
     , hasm
     , melf
+    , mtl
+    , process
     , tasty
     , tasty-golden
     , tasty-hunit
