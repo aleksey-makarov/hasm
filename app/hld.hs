@@ -2,11 +2,13 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import Data.Elf
 import Data.Version
 import Options.Applicative
+import System.Posix.Files
 
 import Paths_hasm
 
@@ -48,7 +50,14 @@ main' PrintVersion = putStrLn $ showVersion version
 
 main' PrintType = undefined
 
-main' (GoLink inf outf) = readFileStrict inf >>= parseElf >>= dummyLd >>= serializeElf >>= BSL.writeFile outf
+main' (GoLink inf outf) = do
+  readFileStrict inf >>= parseElf >>= dummyLd >>= serializeElf >>= BSL.writeFile outf
+  makeFileExecutable outf
+
+makeFileExecutable :: String -> IO ()
+makeFileExecutable path = do
+    m <- fileMode <$> getFileStatus path
+    setFileMode path $ m .|. ownerExecuteMode
 
 -- | Read the file strictly but return lazy bytestring
 readFileStrict :: FilePath -> IO BSL.ByteString

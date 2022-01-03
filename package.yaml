@@ -35,12 +35,11 @@ library:
     - Code.ForwardLabel
 
 tests:
-  exceptions:
+  test:
     main: Tests.hs
     source-dirs: tests
     dependencies:
       - bytestring
-      - unix
       - filepath
       - exceptions
       - tasty
@@ -58,7 +57,7 @@ executables:
     ghc-options: -fno-warn-unused-do-bind -threaded -rtsopts -with-rtsopts=-N
     dependencies:
       - melf
+      - unix
       - optparse-applicative >= 0.16.1 && < 0.17
       - bytestring
       - hasm
-      # - githash

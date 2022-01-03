@@ -1,15 +1,21 @@
 let
+
   sources = import ./nix/sources.nix;
   pkgs = import sources.nixpkgs { };
-  melf = pkgs.haskellPackages.callCabal2nix "melf" sources.melf {};
+  pkgsCross = import sources.nixpkgs {
+    crossSystem.config = "aarch64-unknown-linux-gnu";
+  };
+
+  melf                 = pkgs.haskellPackages.callCabal2nix "melf"                 sources.melf                 {};
   exception-context-th = pkgs.haskellPackages.callCabal2nix "exception-context-th" sources.exception-context-th {};
-  overrides = _ : _ : {
-    inherit exception-context-th;
-    inherit melf;
-  };
+
   haskellPackages = pkgs.haskellPackages.override {
-    inherit overrides;
+    overrides = _ : _ : {
+      inherit exception-context-th;
+      inherit melf;
+    };
   };
+
 in
   haskellPackages.developPackage {
     root = ./.;
@@ -21,5 +27,6 @@ in
           niv
           packdeps
           pkgs.qemu
+          pkgsCross.buildPackages.gcc
         ]);
   }

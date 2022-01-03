@@ -1,61 +1,71 @@
 module Main (main) where
 
 import Control.Monad.State as MS
-import Data.Bits
 import Data.ByteString.Lazy as BSL
+import Data.Elf
 import System.FilePath
-import System.Posix.Files
 import System.Process
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import Data.Elf
+import Paths_hasm
 
 import Asm.AsmAArch64
-import Asm.DummyLd
 
 import Code.HelloWorld
 import Code.ForwardLabel
-
-makeFileExecutable :: String -> IO ()
-makeFileExecutable path = do
-    m <- fileMode <$> getFileStatus path
-    setFileMode path $ m .|. ownerExecuteMode
-
-fixTargetName :: String -> String
-fixTargetName = fmap f
-    where
-        f '.' = '_'
-        f x   = x
-
-writeElf :: FilePath -> Elf -> IO ()
-writeElf path elf = do
-    e <- serializeElf elf
-    BSL.writeFile path e
-    makeFileExecutable path
 
 testsOutDir :: FilePath
 testsOutDir = "tests" </> "out"
 
 runExe :: String -> IO String
-runExe elfFileName = readProcess "qemu-aarch64" [f] []
+runExe name = readProcess "qemu-aarch64" [f] []
     where
-        f = testsOutDir </> elfFileName
+        f = testsOutDir </> name
+
+mkObj :: String -> StateT CodeState IO () -> IO ()
+mkObj name code = assemble code >>= serializeElf >>= BSL.writeFile n
+    where
+        n = testsOutDir </> name <.> "o"
+
+ldDummy :: String -> IO ()
+ldDummy name = do
+    bindir <- getBinDir
+    callProcess (bindir </> "hld") [i, o]
+    where
+        i = testsOutDir </> name <.> "o"
+        o = testsOutDir </> name <.> "dummy"
+
+ldGcc :: String -> IO ()
+ldGcc name = callProcess "aarch64-unknown-linux-gnu-gcc" [i, "-nostdlib", "-o", o]
+    where
+        i = testsOutDir </> name <.> "o"
+        o = testsOutDir </> name <.> "gcc"
 
 testExe :: String -> StateT CodeState IO () -> String -> [ TestTree ]
-testExe elfFileName code expectedString =
-    [ testCase makeTargetName (assemble code >>= dummyLd >>= writeElf f)
-    , after AllSucceed makeTargetName $ testCase checkTargetName $ do
-        out <- runExe elfFileName
-        out @?= expectedString
+testExe name code expectedString =
+    [ testCase mkObjTestName $ mkObj name code
+    , after AllSucceed mkObjTestName $ testGroup checkObjTestName
+        [ testCase mkGccLdTestName $ ldDummy name
+        , after AllSucceed mkGccLdTestName $ testCase runGccLdTestName $ do
+            out <- runExe $ name <.> "gcc"
+            out @?= expectedString
+        , testCase mkDummyLdTestName $ ldGcc name
+        , after AllSucceed mkDummyLdTestName $ testCase runDummyLdTestName $ do
+            out <- runExe $ name <.> "dummy"
+            out @?= expectedString
+        ]
     ]
     where
-        makeTargetName  = "make_"  ++ fixTargetName elfFileName
-        checkTargetName = "check_" ++ fixTargetName elfFileName
-        f = testsOutDir </> elfFileName
+        mkObjTestName      = name ++ "_mkobj"
+        checkObjTestName   = name ++ "_checkobj"
+        mkGccLdTestName    = name ++ "_mkgcc"
+        runGccLdTestName   = name ++ "_rungcc"
+        mkDummyLdTestName  = name ++ "_mkdummy"
+        runDummyLdTestName = name ++ "_rundummy"
 
 main :: IO ()
-main = defaultMain $ testGroup "examples"
+main = defaultMain $ testGroup "tests"
     (  testExe "helloWorld"   helloWorld   "Hello World!\n"
     ++ testExe "forwardLabel" forwardLabel "ok\n"
     )
