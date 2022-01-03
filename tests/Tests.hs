@@ -46,11 +46,11 @@ testExe :: String -> StateT CodeState IO () -> String -> [ TestTree ]
 testExe name code expectedString =
     [ testCase mkObjTestName $ mkObj name code
     , after AllSucceed mkObjTestName $ testGroup checkObjTestName
-        [ testCase mkGccLdTestName $ ldDummy name
+        [ testCase mkGccLdTestName $ ldGcc name
         , after AllSucceed mkGccLdTestName $ testCase runGccLdTestName $ do
             out <- runExe $ name <.> "gcc"
             out @?= expectedString
-        , testCase mkDummyLdTestName $ ldGcc name
+        , testCase mkDummyLdTestName $ ldDummy name
         , after AllSucceed mkDummyLdTestName $ testCase runDummyLdTestName $ do
             out <- runExe $ name <.> "dummy"
             out @?= expectedString
