@@ -1,22 +1,33 @@
 module Main (main) where
 
 import Control.Monad.State as MS
+import Data.Bits
+import Data.ByteString as BS
 import Data.ByteString.Lazy as BSL
 import Data.Elf
 import System.FilePath
+import System.Posix.Files
 import System.Process
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import Paths_hasm
-
 import Asm.AsmAArch64
+import Asm.DummyLd
 
 import Code.HelloWorld
 import Code.ForwardLabel
 
 testsOutDir :: FilePath
 testsOutDir = "tests" </> "out"
+
+makeFileExecutable :: String -> IO ()
+makeFileExecutable path = do
+    m <- fileMode <$> getFileStatus path
+    setFileMode path $ m .|. ownerExecuteMode
+
+-- | Read the file strictly but return lazy bytestring
+readFileStrict :: FilePath -> IO BSL.ByteString
+readFileStrict path = BSL.fromStrict <$> BS.readFile path
 
 runExe :: String -> IO String
 runExe name = readProcess "qemu-aarch64" [f] []
@@ -30,8 +41,8 @@ mkObj name code = assemble code >>= serializeElf >>= BSL.writeFile n
 
 ldDummy :: String -> IO ()
 ldDummy name = do
-    bindir <- getBinDir
-    callProcess (bindir </> "hld") [i, o]
+    readFileStrict i >>= parseElf >>= dummyLd >>= serializeElf >>= BSL.writeFile o
+    makeFileExecutable o
     where
         i = testsOutDir </> name <.> "o"
         o = testsOutDir </> name <.> "dummy"

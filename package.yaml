@@ -20,19 +20,19 @@ github: aleksey-makarov/hasm
 
 library:
   dependencies:
-    - template-haskell >= 2.16 && < 2.17
-    - exceptions
-    - singletons
-    - exception-context-th
-    - mtl
     - bytestring
+    - exception-context-th
+    - exceptions
     - melf
+    - mtl
+    - singletons
+    - template-haskell >= 2.16 && < 2.17
   source-dirs: src
   exposed-modules:
     - Asm.AsmAArch64
     - Asm.DummyLd
-    - Code.HelloWorld
     - Code.ForwardLabel
+    - Code.HelloWorld
 
 tests:
   test:
@@ -40,15 +40,16 @@ tests:
     source-dirs: tests
     dependencies:
       - bytestring
-      - filepath
       - exceptions
-      - tasty
-      - tasty-golden
-      - tasty-hunit
+      - filepath
       - hasm
       - melf
       - mtl
       - process
+      - tasty
+      - tasty-golden
+      - tasty-hunit
+      - unix
 
 executables:
   hld:
@@ -56,8 +57,8 @@ executables:
     source-dirs: app
     ghc-options: -fno-warn-unused-do-bind -threaded -rtsopts -with-rtsopts=-N
     dependencies:
-      - melf
-      - unix
-      - optparse-applicative >= 0.16.1 && < 0.17
       - bytestring
       - hasm
+      - melf
+      - optparse-applicative >= 0.16.1 && < 0.17
+      - unix
