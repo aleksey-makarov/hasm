@@ -1,12 +1,12 @@
-# exception-context-th
+# hasm
 
-> Template Haskell macroses that add location info to exception
+> A DSL embedded into Haskell to generate machine code
 
-## Related work
+## Plans
 
-- [loch-th](https://hackage.haskell.org/package/loch-th)
-- [bug](https://hackage.haskell.org/package/bug)
-- [Hoed](https://github.com/MaartenFaddegon/Hoed)
+- AArch64
+- AArch32
+- RISC-V both 32 and 64 bit
 
 ## License
 
