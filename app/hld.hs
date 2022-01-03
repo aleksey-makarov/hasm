@@ -5,8 +5,10 @@
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import Data.Elf
-import GitHash
+import Data.Version
 import Options.Applicative
+
+import Paths_hasm
 
 import Asm.DummyLd
 
@@ -42,10 +44,7 @@ main = execParser opts >>= main'
 
 main' :: Options -> IO ()
 
-main' PrintVersion = putStrLn $ concat [giTag gi, " (", giBranch gi, "@", giHash gi, ")", dirty]
-  where
-    dirty = if giDirty gi then " dirty" else ""
-    gi = $$tGitInfoCwd
+main' PrintVersion = putStrLn $ showVersion version
 
 main' PrintType = undefined
 
