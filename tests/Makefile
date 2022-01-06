@@ -3,10 +3,15 @@ CFLAGS = -Wall
 CC = $(PREFIX)gcc
 LDFLAGS = -nostdlib
 
-all: test_bss.o test_bss.o.dis test_bss.o.dump test_bss.gcc test_bss.gcc.dis test_bss.gcc.dump
+TEST_BSS = test_bss.S test_bss.o test_bss.o.dis test_bss.o.dump test_bss.gcc test_bss.gcc.dis test_bss.gcc.dump
+
+all : $(TEST_BSS)
 
 # test_bss.o : CFLAGS += -O3
 test_bss.gcc : LDFLAGS =
+
+%.S : %.c
+	$(CC) -S $< -o $@
 
 %.gcc : %.o
 	$(CC) $(LDFLAGS) $< -o $@
@@ -28,4 +33,4 @@ test_bss.gcc : LDFLAGS =
 	pandoc --standalone -o $@ $<
 
 clean:
-	rm -rf *.html *.dump *.layout *.dis *.dummy *.gcc *.o
+	rm -rf *.html *.dump *.layout *.dis *.dummy *.gcc *.o *.S
