@@ -5,7 +5,7 @@ LDFLAGS = -nostdlib
 
 all: test_bss.o test_bss.o.dis test_bss.o.dump test_bss.gcc test_bss.gcc.dis test_bss.gcc.dump
 
-test_bss.o : CFLAGS += -O3
+# test_bss.o : CFLAGS += -O3
 test_bss.gcc : LDFLAGS =
 
 %.gcc : %.o
