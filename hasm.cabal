@@ -69,6 +69,7 @@ test-suite test
   other-modules:
       Code.ForwardLabel
       Code.HelloWorld
+      Code.TestBss
       Paths_hasm
   hs-source-dirs:
       tests

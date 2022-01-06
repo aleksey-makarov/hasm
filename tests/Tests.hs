@@ -16,6 +16,7 @@ import Asm.DummyLd
 
 import Code.HelloWorld
 import Code.ForwardLabel
+import Code.TestBss
 
 testsOutDir :: FilePath
 testsOutDir = "tests" </> "out"
@@ -79,4 +80,5 @@ main :: IO ()
 main = defaultMain $ testGroup "tests"
     (  testExe "helloWorld"   helloWorld   "Hello World!\n"
     ++ testExe "forwardLabel" forwardLabel "ok\n"
+    -- ++ testExe "testBss"      testBss "abcdefghijklmnop\n"
     )
