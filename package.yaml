@@ -31,8 +31,6 @@ library:
   exposed-modules:
     - Asm.AsmAArch64
     - Asm.DummyLd
-    - Code.ForwardLabel
-    - Code.HelloWorld
 
 tests:
   test:

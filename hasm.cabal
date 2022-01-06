@@ -31,8 +31,6 @@ library
   exposed-modules:
       Asm.AsmAArch64
       Asm.DummyLd
-      Code.HelloWorld
-      Code.ForwardLabel
   other-modules:
       Paths_hasm
   hs-source-dirs:
@@ -69,6 +67,8 @@ test-suite test
   type: exitcode-stdio-1.0
   main-is: Tests.hs
   other-modules:
+      Code.ForwardLabel
+      Code.HelloWorld
       Paths_hasm
   hs-source-dirs:
       tests
