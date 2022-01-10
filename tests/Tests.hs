@@ -9,6 +9,7 @@ import System.FilePath
 import System.Posix.Files
 import System.Process
 import Test.Tasty
+import Test.Tasty.Golden
 import Test.Tasty.HUnit
 
 import Asm.AsmAArch64
@@ -16,7 +17,7 @@ import Asm.DummyLd
 
 import Code.HelloWorld
 import Code.ForwardLabel
-import Code.TestBss
+-- import Code.TestBss
 
 testsOutDir :: FilePath
 testsOutDir = "tests" </> "out"
@@ -54,11 +55,13 @@ ldGcc name = callProcess "aarch64-unknown-linux-gnu-gcc" [i, "-nostdlib", "-o", 
         i = testsOutDir </> name <.> "o"
         o = testsOutDir </> name <.> "gcc"
 
+
 testExe :: String -> StateT CodeState IO () -> String -> [ TestTree ]
 testExe name code expectedString =
     [ testCase mkObjTestName $ mkObj name code
     , after AllSucceed mkObjTestName $ testGroup checkObjTestName
-        [ testCase mkGccLdTestName $ ldGcc name
+        [ goldenVsFile dumpObjTestName dumpGoldenName dumpOutName mkDump
+        , testCase mkGccLdTestName $ ldGcc name
         , after AllSucceed mkGccLdTestName $ testCase runGccLdTestName $ do
             out <- runExe $ name <.> "gcc"
             out @?= expectedString
@@ -71,10 +74,17 @@ testExe name code expectedString =
     where
         mkObjTestName      = name ++ "_mkobj"
         checkObjTestName   = name ++ "_checkobj"
+        dumpObjTestName    = name ++ "_dump"
         mkGccLdTestName    = name ++ "_mkgcc"
         runGccLdTestName   = name ++ "_rungcc"
         mkDummyLdTestName  = name ++ "_mkdummy"
         runDummyLdTestName = name ++ "_rundummy"
+
+        objName            = testsOutDir </> name <.> "o"
+        dumpOutName        = testsOutDir </> name <.> "o" <.> "dump"
+        dumpGoldenName     = testsOutDir </> name <.> "o" <.> "dump" <.> "golden"
+
+        mkDump             = callCommand ("hobjdump -f " ++ objName ++ " > " ++ dumpOutName)
 
 main :: IO ()
 main = defaultMain $ testGroup "tests"
