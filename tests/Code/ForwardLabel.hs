@@ -1,13 +1,12 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecursiveDo #-}
 
 module Code.ForwardLabel (forwardLabel) where
 
 import Prelude as P
 
-import Control.Monad.Catch
 import Control.Monad.Fix
-import Control.Monad.State
 import Data.Word
 
 import Asm.AsmAArch64
@@ -23,7 +22,7 @@ sysExit, sysWrite :: Word16
 sysWrite = 64
 sysExit = 93
 
-forwardLabel :: (MonadCatch m, MonadFix m) => StateT CodeState m ()
+forwardLabel :: (CodeMonad m, MonadFix m) => m ()
 forwardLabel = mdo
 
     label >>= exportSymbol "_start"
@@ -31,21 +30,21 @@ forwardLabel = mdo
     lOk <- ascii ok
     lBad <- ascii bad
 
-    mov x0 1
+    movz x0 $ LSL0 1
 
     adr x1 lOk
-    mov x2 $ fromIntegral $ P.length ok
+    movz x2 $ LSL0 $ fromIntegral $ P.length ok
 
     b skipBad
 
     adr x1 lBad
-    mov x2 $ fromIntegral $ P.length bad
+    movz x2 $ LSL0 $ fromIntegral $ P.length bad
 
     skipBad <- label
 
-    mov x8 sysWrite
+    movz x8 $ LSL0 sysWrite
     svc 0
 
-    mov x0 0
-    mov x8 sysExit
+    movz x0 $ LSL0 0
+    movz x8 $ LSL0 sysExit
     svc 0

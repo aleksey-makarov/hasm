@@ -1,7 +1,10 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving  #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -9,93 +12,85 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Asm.AsmAArch64
-    ( CodeState
+    (
+    -- * Data
+      CodeState
+    , CodeMonad
     , Register
     , Label
+
+    -- * Instructions
+    , instr
     , adr
     , b
-    , mov
+    , MovData (..)
+    , movk
+    , movn
+    , movz
     , ldr
     , svc
+
+    -- * Relocations
+
+    -- * Assembler directives
     , ascii
     , label
+    , ltorg
     , exportSymbol
-    , assemble
+
+    -- * Registers
     , x0, x1, x2, x8
     , w0, w1
+
+    -- * Functions
+    , assemble
     ) where
 
 import Prelude as P
 
 import Control.Exception.ContextTH
-import Control.Monad.Catch
+import Control.Monad.Catch hiding (mask)
 import Control.Monad.State as MS
+import Data.Array.Unboxed
 import Data.Bits
 import Data.ByteString.Builder
 import Data.ByteString.Lazy as BSL
-import Data.ByteString.Lazy.Char8 as BSLC
+-- Data.ByteString.Lazy.Char8 as BSLC
+import Data.Elf
+import Data.Elf.Constants
+import Data.Elf.Headers
 import Data.Int
 import Data.Kind
+-- import Data.List (sortOn)
 import Data.Singletons.Sigma
 import Data.Singletons.TH
 import Data.Word
 
-import Data.Elf
-import Data.Elf.Constants
-import Data.Elf.Headers
-
 $(singletons [d| data RegisterWidth = X | W |])
+
+newtype TextAddress  = TextAddress  { getTextAddress  :: Int64 }
+    deriving (Eq, Show, Ord, Num, Enum, Real, Integral, Bits, FiniteBits)
+
+newtype Instruction = Instruction { getInstruction :: Word32 }
+    deriving (Eq, Show, Ord, Num, Enum, Real, Integral, Bits, FiniteBits)
+
+newtype Label = Label Int
+
+instructionSize :: Num b => b
+instructionSize = 4
+
+type CodeMonad m = (MonadThrow m, MonadState CodeState m)
+
+--------------------------------------------------------------------------------
+-- registers
 
 type Register :: RegisterWidth -> Type
 newtype Register c = R Word32
-
-newtype CodeOffset  = CodeOffset  { getCodeOffset  :: Int64 }  deriving (Eq, Show, Ord, Num, Enum, Real, Integral, Bits, FiniteBits)
-newtype Instruction = Instruction { getInstruction :: Word32 } deriving (Eq, Show, Ord, Num, Enum, Real, Integral, Bits, FiniteBits)
-
-data Label = CodeRef !CodeOffset
-           | PoolRef !CodeOffset
-
--- Args:
--- Offset of the instruction
--- Offset of the pool
-type InstructionGen = CodeOffset -> CodeOffset -> Either String Instruction
-
-data CodeState = CodeState
-    { offsetInPool    :: CodeOffset
-    , poolReversed    :: [Builder]
-    , codeReversed    :: [InstructionGen]
-    , symbolsRefersed :: [(String, Label)]
-    }
-
-emit' :: MonadState CodeState m => InstructionGen -> m ()
-emit' g = modify f where
-    f CodeState {..} = CodeState { codeReversed = g : codeReversed
-                                 , ..
-                                 }
-
-emit :: MonadState CodeState m => Instruction -> m ()
-emit i = emit' $ \ _ _ -> Right i
-
-emitPool :: MonadState CodeState m => Word -> ByteString -> m Label
-emitPool a bs = state f where
-    f CodeState {..} =
-        let
-            offsetInPool' = align a offsetInPool
-            o = builderRepeatZero $ fromIntegral $ offsetInPool' - offsetInPool
-        in
-            ( PoolRef offsetInPool'
-            , CodeState { offsetInPool = fromIntegral (BSL.length bs) + offsetInPool'
-                        , poolReversed = lazyByteString bs : o : poolReversed
-                        , ..
-                        }
-            )
-
-label :: MonadState CodeState m => m Label
-label = gets (CodeRef . (* instructionSize) . fromIntegral . P.length . codeReversed)
 
 x0, x1, x2, x8 :: Register 'X
 x0 = R 0
@@ -107,112 +102,307 @@ w0, w1 :: Register 'W
 w0 = R 0
 w1 = R 1
 
+--------------------------------------------------------------------------------
+-- state
+
+data LabelTableEntry
+    = LabelTableAllocated TextAddress
+    | LabelTableUnallocated
+        { lteuAlign  :: Int
+        , lteuLength :: Int
+        , lteuData   :: Builder
+        }
+
+data LabelRelocation
+    = LabelRelocation
+        { lrLabel      :: Label
+        , lrRelocation :: ElfRelocationType_AARCH64
+        , lrAddress    :: TextAddress
+        }
+
+data TextChunk
+    = InstructionChunk
+        { icInstruction :: Instruction
+        , icRelocation :: Maybe LabelRelocation
+        }
+    | BuilderChunk
+        { bcLength :: Int
+        , bcData   :: Builder
+        }
+
+
+data CodeState
+    = CodeState
+        { textOffset         :: TextAddress   -- Should always be aligned by instructionSize
+        , textReversed       :: [TextChunk]
+        , symbolsRefersed    :: [(String, Label)]
+        , labelTableReversed :: [LabelTableEntry]
+        }
+
+codeStateInit :: CodeState
+codeStateInit = CodeState 0 [] [] []
+
+offset :: MonadState CodeState m => m TextAddress
+offset = gets textOffset
+
+--------------------------------------------------------------------------------
+-- text
+
+emit' :: CodeMonad m => TextChunk -> m TextAddress
+emit' c = state f where
+    f CodeState {..} =
+        ( textOffset
+        , CodeState { textReversed = c : textReversed
+                    , textOffset = l + textOffset
+                    , ..
+                    }
+        )
+    l = case c of
+        InstructionChunk _ _ -> instructionSize
+        BuilderChunk i _ -> fromIntegral i
+
+emit :: CodeMonad m => Instruction -> Maybe LabelRelocation -> m TextAddress
+emit i lr = emit' $ InstructionChunk i lr
+
+instrReloc :: CodeMonad m => Word32 -> Label -> ElfRelocationType_AARCH64 -> m ()
+instrReloc w l r = do
+    a <- offset
+    void $ emit (Instruction w) (Just $ LabelRelocation l r a)
+
+instr :: CodeMonad m => Word32 -> m ()
+instr w = void $ emit (Instruction w) Nothing
+
+-- IMPORTANT: this can leave text array in unaligned state so
+-- this should not be exported
+emitBuilder :: CodeMonad m => Int -> Builder -> m TextAddress
+emitBuilder l bu | l < 0     = error "internal error: chunk length < 0"
+                 | l == 0    = offset
+                 | otherwise = emit' $ BuilderChunk l bu
+
+-- IMPORTANT: this can leave text array in unaligned state so
+-- this should not be exported
+emitBuilderN :: CodeMonad m => Int -> m ()
+emitBuilderN n = void $ emitBuilder n $ mconcat $ P.map BSB.word8 $ P.replicate n 0
+
+-- IMPORTANT: this can leave text array in unaligned state so
+-- this should not be exported
+align' :: CodeMonad m => Int -> m ()
+align' 0                       = return ()
+align' 1                       = return ()
+align' a | a < 0               = $chainedError "negative align"
+         | not (isPower2 a)    = $chainedError "align is not a power of 2"
+         | otherwise           = do
+    o <- fromIntegral <$> offset -- all operations in Int's
+    let
+        n = (o + a - 1) .&. complement (a - 1)
+        l = n - o
+    emitBuilderN l
+
+-- FIXME: Optimize the order of allocations
+ltorg' :: CodeMonad m => m ()
+ltorg' = do
+    let
+        f x@(LabelTableAllocated _) = return x
+        f LabelTableUnallocated { .. } = do
+            align' lteuAlign
+            LabelTableAllocated <$> emitBuilder lteuLength lteuData
+    lt <- gets labelTableReversed
+    lt' <- mapM f lt
+    modify (\ x -> x { labelTableReversed = lt' })
+
+ltorg :: CodeMonad m => m ()
+ltorg = ltorg' >> align' instructionSize -- FIXME: should it be aligned at 8 to be shure it can be jumped to (?)
+
 isPower2 :: (Bits i, Num i) => i -> Bool
 isPower2 n = n .&. (n - 1) == 0
 
-align :: Word -> CodeOffset -> CodeOffset
-align a _ | not (isPower2 a) = error "align is not a power of 2"
-align 0 n = n
-align a n = (n + a' - 1) .&. complement (a' - 1)
-    where a' = fromIntegral a
+align :: CodeMonad m => Int -> m ()
+align a | a < instructionSize = $chainedError "align is too small"
+        | otherwise           = align' a
 
-builderRepeatZero :: Int -> Builder
-builderRepeatZero n = mconcat $ P.replicate n (word8 0)
+--------------------------------------------------------------------------------
+-- pool
+
+emitPool' :: MonadState CodeState m => LabelTableEntry -> m Label
+emitPool' lte = state f where
+    f CodeState {..} =
+        ( Label $ P.length labelTableReversed
+        , CodeState { labelTableReversed = lte : labelTableReversed
+                    , ..
+                    }
+        )
+
+emitPool :: MonadState CodeState m => Int -> Int -> Builder -> m Label
+emitPool lteuAlign lteuLength lteuData = emitPool' $ LabelTableUnallocated { .. }
+
+label :: MonadState CodeState m => m Label
+label = LabelTableAllocated <$> offset >>= emitPool'
+
+--------------------------------------------------------------------------------
+-- instructions
 
 b64 :: forall w . SingI w => Register w -> Word32
 b64 _ = case sing @ w of
     SX -> 1
     SW -> 0
 
+type Word9  = Word16
+type Word21 = Word32
+type Word26 = Word32
+
+mask :: (Num b, Bits b, Ord b) => Int -> b
+mask n = (1 `shift` n) - 1
+
+fitN :: Int -> Int64 -> Maybe Word32
+fitN bitN w =
+    if (if w >= 0 then h == 0 else h == m) -- FIXME: wrong! (???) what about the bit at (bitN - 1)???
+        then Just $ fromIntegral (w .&. m)
+        else Nothing
+    where
+        m = mask bitN
+        h = w .&. complement m
+
+fixWord :: Integral a => Int -> a -> Word32
+fixWord bitN v = mask bitN .&. fromIntegral v
+
 -- | C6.2.10 ADR
-adr :: MonadState CodeState m => Register 'X -> Label -> m ()
-adr (R n) rr =  emit' f where
+adr_ :: Register 'X -> Word21 -> Word32
+adr_ (R n) imm21 = 0x10000000 .|. imm .|. n
+    where
+        imm21' = fixWord 21 imm21 -- FIXME: Word21 should keep verified integer
+        immlo = imm21' .&. 3
+        immhi = imm21' `shiftR` 2
+        imm   = (immhi `shift` 5) .|. (immlo `shift` 29)
 
-    offsetToImm :: CodeOffset -> Either String Word32
-    offsetToImm (CodeOffset o) =
-        if not $ isBitN 19 o
-                then Left "offset is too big"
-                else
-                    let
-                        immlo = o .&. 3
-                        immhi = (o `shiftR` 2)  .&. 0x7ffff
-                    in
-                        Right $ fromIntegral $ (immhi `shift` 5) .|. (immlo `shift` 29)
+class ArgADR a where
+    adr :: CodeMonad m => Register 'X -> a -> m ()
+instance ArgADR Word21 where
+    adr r w = instr $ adr_ r w
+instance ArgADR Label where
+    adr r l = instrReloc (adr_ r 0) l R_AARCH64_ADR_PREL_LO21
 
-    f :: InstructionGen
-    f instrAddr poolOffset = do
-        imm <- offsetToImm $ findOffset poolOffset rr - instrAddr
-        return $ Instruction $  0x10000000
-                            .|. imm
-                            .|. n
+-- offsetToImm21 :: MonadThrow m => TextAddress -> m Word21
+-- offsetToImm21 (TextAddress o)
+--   | not $ isBitN 21 o = $chainedError "offset is too big"
+--   | otherwise         = return $ fromIntegral (o .&. mask 21)
 
 -- | C6.2.26 B
-b :: MonadState CodeState m => Label -> m ()
-b rr = emit' f where
+b_ :: Word26 -> Word32
+b_ imm26 = 0x14000000 .|. imm26'
+    where
+        imm26' = fixWord 26 imm26 -- FIXME: Word26 should keep verified integer
 
-    offsetToImm26 :: CodeOffset -> Either String Word32
-    offsetToImm26 (CodeOffset o)
-      | o .&. 0x3 /= 0    = Left $ "offset is not aligned: " ++ show o
-      | not $ isBitN 28 o = Left "offset is too big"
-      | otherwise         = Right $ fromIntegral $ o `shiftR` 2
+class ArgB a where
+    b :: CodeMonad m => a -> m ()
+instance ArgB Word26 where
+    b imm26 = instr $ b_ imm26
+instance ArgB Label where
+    b l = instrReloc (b_ 0) l R_AARCH64_JUMP26
 
-    f :: InstructionGen
-    f instrAddr poolOffset = do
-        imm26 <- offsetToImm26 $ findOffset poolOffset rr - instrAddr
-        return $ Instruction $  0x14000000 .|. imm26
+-- offsetToImm26 :: MonadThrow m => TextAddress -> m Word26
+-- offsetToImm26 (TextAddress o)
+--   | o .&. 0x3 /= 0    = $chainedError $ "offset is not aligned: " ++ show o
+--   | not $ isBitN 28 o = $chainedError "offset is too big"
+--   | otherwise         = return $ fromIntegral ((o `shiftR` 2) .&. mask 26)
 
--- | C6.2.187 MOV (wide immediate)
-mov :: (MonadState CodeState m, SingI w) => Register w -> Word16 -> m ()
-mov r@(R n) imm = emit $ Instruction $ (b64 r `shift` 31)
-                                    .|. 0x52800000
-                                    .|. (fromIntegral imm `shift` 5)
-                                    .|. n
+-- | C6.2.190 MOVК
+data MovData = LSL0  Word16
+             | LSL16 Word16
+             | LSL32 Word16
+             | LSL48 Word16
 
--- | The number can be represented with bitN bits
-isBitN ::(Num b, Bits b, Ord b) => Int -> b -> Bool
-isBitN bitN w =
-    let
-        m = complement $ (1 `shift` bitN) - 1
-        h = w .&. m
-    in if w >= 0 then h == 0 else h == m
+movDataToInstrBits :: MovData -> Word32
+movDataToInstrBits d = s `shift` 21 .|. (fromIntegral w `shift` 5)
+    where
+        (s, w) = case d of
+            (LSL0  w') -> (0, w')
+            (LSL16 w') -> (1, w')
+            (LSL32 w') -> (2, w')
+            (LSL48 w') -> (3, w')
 
-findOffset :: CodeOffset -> Label -> CodeOffset
-findOffset _poolOffset (CodeRef codeOffset)   = codeOffset
-findOffset  poolOffset (PoolRef offsetInPool) = poolOffset + offsetInPool
+movk :: (CodeMonad m, SingI w) => Register w -> MovData -> m ()
+movk r@(R n) d = instr $ (b64 r `shift` 31)
+                      .|. 0x72800000
+                      .|. movDataToInstrBits d
+                      .|. n
+
+-- | C6.2.191 MOVN
+movn :: (CodeMonad m, SingI w) => Register w -> MovData -> m ()
+movn r@(R n) d = instr $ (b64 r `shift` 31)
+                      .|. 0x12800000
+                      .|. movDataToInstrBits d
+                      .|. n
+
+-- | C6.2.192 MOVZ
+movz :: (CodeMonad m, SingI w) => Register w -> MovData -> m ()
+movz r@(R n) d = instr $ (b64 r `shift` 31)
+                      .|. 0x52800000
+                      .|. movDataToInstrBits d
+                      .|. n
 
 -- | C6.2.132 LDR (literal)
-ldr :: (MonadState CodeState m, SingI w) => Register w -> Label -> m ()
-ldr r@(R n) rr = emit' f where
+ldr :: (CodeMonad m, SingI w) => Register w -> Word9 -> m ()
+ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
+                        .|. 0x18000000
+                        .|. (imm9' `shift` 5)
+                        .|. n
+    where
+        imm9' = fixWord 9 imm9 -- FIXME: Word9 should keep verified integer
 
-    offsetToImm19 :: CodeOffset -> Either String Word32
-    offsetToImm19 (CodeOffset o)
-      | o .&. 0x3 /= 0    = Left "offset is not aligned"
-      | not $ isBitN 21 o = Left "offset is too big"
-      | otherwise         = Right $ fromIntegral $ o `shiftR` 2
+-- offsetToImm9 :: MonadThrow m => TextAddress -> m Word9
+-- offsetToImm9 (TextAddress o)
+--   | o .&. 0x3 /= 0    = $chainedError $ "offset is not aligned: " ++ show o
+--   | not $ isBitN 11 o = $chainedError "offset is too big"
+--   | otherwise         = return $ fromIntegral ((o `shiftR` 2) .&. mask 9)
 
-    f :: InstructionGen
-    f instrAddr poolOffset = do
-        imm19 <- offsetToImm19 $ findOffset poolOffset rr - instrAddr
-        return $ Instruction $ (b64 r `shift` 30)
-                            .|. 0x18000000
-                            .|. (imm19 `shift` 5)
-                            .|. n
 
 -- | C6.2.317 SVC
-svc :: MonadState CodeState m => Word16 -> m ()
-svc imm = emit $ 0xd4000001 .|. (fromIntegral imm `shift` 5)
+svc ::CodeMonad m => Word16 -> m ()
+svc imm = instr $ 0xd4000001 .|. (fromIntegral imm `shift` 5)
+
+--------------------------------------------------------------------------------
+-- asm directives
 
 ascii :: MonadState CodeState m => String -> m Label
-ascii s = emitPool 1 $ BSLC.pack s
+ascii s = emitPool 1 l bu
+    where
+        bu = stringUtf8 s
+        l = fromIntegral $ BSL.length $ toLazyByteString bu
 
 exportSymbol :: MonadState CodeState m => String -> Label -> m ()
 exportSymbol s r = modify f where
-    f (CodeState {..}) = CodeState { symbolsRefersed = (s, r) : symbolsRefersed
-                                   , ..
-                                   }
+    f CodeState {..} =
+        CodeState { symbolsRefersed = (s, r) : symbolsRefersed
+                  , ..
+                  }
 
-instructionSize :: Num b => b
-instructionSize = 4
+--------------------------------------------------------------------------------
+-- relocation
+
+relocate ::      MonadThrow m =>
+    ElfRelocationType_AARCH64 ->
+                  Instruction ->
+                  TextAddress ->
+                  TextAddress ->
+                        Int64 -> m Instruction
+relocate R_AARCH64_JUMP26 (Instruction w) (TextAddress p) (TextAddress s) a = do
+    let
+        x = (s + a - p) `shiftR` 2
+    imm <- $maybeAddContext "imm does not fit" $ fitN 26 x
+    return $ Instruction $ (w .&. 0xfc000000) .|. imm
+relocate R_AARCH64_ADR_PREL_LO21 (Instruction w) (TextAddress p) (TextAddress s) a = do
+    let
+        x = (s + a - p)
+    imm21 <- $maybeAddContext "imm does not fit" $ fitN 21 x
+    let
+        immlo = imm21 .&. 3
+        immhi = imm21 `shiftR` 2
+        imm   = (immhi `shift` 5) .|. (immlo `shift` 29)
+    return $ Instruction $ (w .&. 0x9f00001f) .|. imm
+relocate rl _ _ _ _ = $chainedError ("relocation is not implemented: " <> show rl)
+
+--------------------------------------------------------------------------------
+-- assembler
 
 zeroIndexStringItem :: ElfSymbolXX 'ELFCLASS64
 zeroIndexStringItem = ElfSymbolXX "" 0 0 0 0 0
@@ -226,41 +416,60 @@ symtabSecN   = 4
 assemble :: MonadCatch m => StateT CodeState m () -> m Elf
 assemble m = do
 
-    CodeState {..} <- execStateT m (CodeState 0 [] [] [])
-
-    -- resolve txt
+    CodeState {..} <- execStateT (m >> ltorg') codeStateInit
 
     let
-        poolOffset = instructionSize * fromIntegral (P.length codeReversed)
-        poolOffsetAligned = align 8 poolOffset
+        -- labels
 
-        f :: (InstructionGen, CodeOffset) -> Either String Instruction
-        f (ff, n) = ff n poolOffsetAligned
+        labelTable = P.reverse labelTableReversed
+        labelTableLength = P.length labelTable
 
-    code <- $eitherAddContext' $ mapM f $ P.zip (P.reverse codeReversed) (fmap (instructionSize *) [CodeOffset 0 .. ])
+        fLabel :: LabelTableEntry -> Int64
+        fLabel (LabelTableAllocated o) = getTextAddress o
+        fLabel _ = error "internal error: some Labels are not allocated"
+
+        labelArray :: UArray Int Int64
+        labelArray = if not (labelTableLength > 0)
+            then error "internal error: no Labels defined, an attempt to resolve a Label"
+            else array (0, labelTableLength - 1) (P.zip [0 ..] $ P.map fLabel $ labelTable)
+
+        labelToTextAddress :: Label -> TextAddress
+        labelToTextAddress (Label i) = TextAddress $ labelArray ! i
+
+        -- txt
+
+        text = P.reverse textReversed
+
+        fTxt' :: MonadThrow m => Instruction -> Maybe LabelRelocation -> m Instruction
+        fTxt' i Nothing                         = return i
+        fTxt' i (Just (LabelRelocation { .. })) = relocate lrRelocation i lrAddress (labelToTextAddress lrLabel) 0
+
+        fTxt :: MonadThrow m => TextChunk -> m Builder
+        fTxt (InstructionChunk i rl) = word32LE <$> getInstruction <$> fTxt' i rl
+        fTxt (BuilderChunk _ bu) = return bu
+
+    txt <- toLazyByteString <$> mconcat <$> mapM fTxt text
+
+        -- symbols
 
     let
-        codeBuilder = mconcat $ fmap (word32LE . getInstruction) code
-        txt = toLazyByteString $ codeBuilder
-                              <> builderRepeatZero (fromIntegral $ poolOffsetAligned - poolOffset)
-                              <> mconcat (P.reverse poolReversed)
+        symbols = P.reverse symbolsRefersed
 
-    -- resolve symbolTable
-
-    let
-        ff :: (String, Label) -> ElfSymbolXX 'ELFCLASS64
-        ff (s, r) =
+        fSymbol :: (String, Label) -> ElfSymbolXX 'ELFCLASS64
+        fSymbol (s, l) =
             let
                 steName  = s
                 steBind  = STB_Global
                 steType  = STT_NoType
                 steShNdx = textSecN
-                steValue = fromIntegral $ findOffset poolOffset r
+                steValue = fromIntegral $ getTextAddress $ labelToTextAddress l
                 steSize  = 0
             in
                 ElfSymbolXX{..}
 
-        symbolTable = ff <$> P.reverse symbolsRefersed
+        symbolTable = fSymbol <$> symbols
+
+    -- resolve symbolTable
 
     (symbolTableData, stringTableData) <- serializeSymbolTable ELFDATA2LSB (zeroIndexStringItem : symbolTable)
 
