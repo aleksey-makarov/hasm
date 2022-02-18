@@ -62,11 +62,11 @@ testExe name code expectedString =
     , after AllSucceed mkObjTestName $ testGroup checkObjTestName
         [ goldenVsFile dumpObjTestName dumpGoldenName dumpOutName mkDump
         , testCase mkGccLdTestName $ ldGcc name
-        , after AllSucceed mkGccLdTestName $ testCase runGccLdTestName $ do
+        , after AllSucceed mkGccLdTestName $ localOption (mkTimeout 500000) $ testCase runGccLdTestName $ do
             out <- runExe $ name <.> "gcc"
             out @?= expectedString
         , testCase mkDummyLdTestName $ ldDummy name
-        , after AllSucceed mkDummyLdTestName $ testCase runDummyLdTestName $ do
+        , after AllSucceed mkDummyLdTestName $ localOption (mkTimeout 500000) $ testCase runDummyLdTestName $ do
             out <- runExe $ name <.> "dummy"
             out @?= expectedString
         ]
