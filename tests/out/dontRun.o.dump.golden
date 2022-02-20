@@ -1,0 +1,60 @@
+header {
+    Class:      ELFCLASS64
+    Data:       ELFDATA2LSB
+    OSABI:      ELFOSABI_SYSV
+    ABIVersion: 0
+    Type:       ET_REL
+    Machine:    EM_AARCH64
+    Entry:      0x0000000000000000
+    Flags:      0x00000000
+}
+section 1 ".text" {
+    Type:      SHT_PROGBITS
+    Flags:     [SHF_ALLOC,SHF_EXECINSTR]
+    Addr:      0x0000000000000000
+    AddrAlign: 0x0000000000000008
+    EntSize:   0x0000000000000000
+    Info:      0x00000000
+    Link:      0x00000000
+    Data:      01 ef cd ab 02 ef cd ab 03 ef cd ab a5 61 73 63 # .............asc
+               69 69 7a 00 61 73 63 69 69 00 00 00 04 ef cd ab # iiz.ascii.......
+               05 ef cd ab 06 ef cd ab 16 ff a5 00 17 ff 00 00 # ................
+               32 dd ee ff 00 00 00 00 64 99 aa bb cc dd ee ff # 2.......d.......
+               a5 00 00 00 07 ef cd ab a5                      # .........
+}
+string table section 2 ".shstrtab"
+symbol table section 4 ".symtab" {
+    Type:      SHT_SYMTAB
+    Flags:     []
+    Addr:      0x0000000000000000
+    AddrAlign: 0x0000000000000008
+    EntSize:   0x0000000000000018
+    Info:      0x00000001
+    Link:      0x00000003
+    Data:      
+        symbol "" {
+            Bind:  STB_Local
+            Type:  STT_NoType
+            ShNdx: SHN_Undef
+            Value: 0x0000000000000000
+            Size:  0x0000000000000000
+        }
+        symbol "_start" {
+            Bind:  STB_Global
+            Type:  STT_NoType
+            ShNdx: SHN_EXT 1
+            Value: 0x0000000000000000
+            Size:  0x0000000000000000
+        }
+}
+section 3 ".strtab" {
+    Type:      SHT_STRTAB
+    Flags:     []
+    Addr:      0x0000000000000000
+    AddrAlign: 0x0000000000000001
+    EntSize:   0x0000000000000000
+    Info:      0x00000000
+    Link:      0x00000000
+    Data:      00 5f 73 74 61 72 74 00                         # ._start.
+}
+section table

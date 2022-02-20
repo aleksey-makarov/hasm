@@ -38,7 +38,10 @@ module Asm.AsmAArch64
     -- * Relocations
 
     -- * Assembler directives
-    , ascii
+    , ascii, asciiz
+    , byte, short, word, long
+    , word8, word16, word32, word64
+
     , label
     , ltorg
     , exportSymbol
@@ -58,7 +61,8 @@ import Control.Monad.Catch hiding (mask)
 import Control.Monad.State as MS
 import Data.Array.Unboxed
 import Data.Bits
-import Data.ByteString.Builder
+import Data.ByteString.Builder hiding (word8)
+import qualified Data.ByteString.Builder as BSB
 import Data.ByteString.Lazy as BSL
 -- Data.ByteString.Lazy.Char8 as BSLC
 import Data.Elf
@@ -368,6 +372,25 @@ ascii s = emitPool 1 l bu
     where
         bu = stringUtf8 s
         l = fromIntegral $ BSL.length $ toLazyByteString bu
+
+asciiz :: MonadState CodeState m => String -> m Label
+asciiz s = ascii (s <> "\0")
+
+word8, byte :: MonadState CodeState m => Word8 -> m Label
+word8 w = emitPool 1 1 $ BSB.word8 w
+byte = word8
+
+word16, short :: MonadState CodeState m => Word16 -> m Label
+word16 w = emitPool 2 2 $ BSB.word16LE w
+short = word16
+
+word32, word :: MonadState CodeState m => Word32 -> m Label
+word32 w = emitPool 4 4 $ BSB.word32LE w
+word = word32
+
+word64, long :: MonadState CodeState m => Word64 -> m Label
+word64 w = emitPool 8 8 $ BSB.word64LE w
+long = word64
 
 exportSymbol :: MonadState CodeState m => String -> Label -> m ()
 exportSymbol s r = modify f where

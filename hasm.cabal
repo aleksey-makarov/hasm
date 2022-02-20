@@ -68,6 +68,7 @@ test-suite test
   type: exitcode-stdio-1.0
   main-is: Tests.hs
   other-modules:
+      Code.DontRun
       Code.ForwardLabel
       Code.HelloWorld
       Code.TestBss

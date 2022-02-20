@@ -18,6 +18,7 @@ import Asm.DummyLd
 import Code.HelloWorld
 import Code.ForwardLabel
 -- import Code.TestBss
+import Code.DontRun
 
 testsOutDir :: FilePath
 testsOutDir = "tests" </> "out"
@@ -56,20 +57,24 @@ ldGcc name = callProcess "aarch64-unknown-linux-gnu-gcc" [i, "-nostdlib", "-o", 
         o = testsOutDir </> name <.> "gcc"
 
 
-testExe :: String -> StateT CodeState IO () -> String -> [ TestTree ]
-testExe name code expectedString =
+testExe :: String -> StateT CodeState IO () -> Maybe String -> [ TestTree ]
+testExe name code maybeExpectedString =
     [ testCase mkObjTestName $ mkObj name code
-    , after AllSucceed mkObjTestName $ testGroup checkObjTestName
+    , after AllSucceed mkObjTestName $ testGroup checkObjTestName $
         [ goldenVsFile dumpObjTestName dumpGoldenName dumpOutName mkDump
-        , testCase mkGccLdTestName $ ldGcc name
-        , after AllSucceed mkGccLdTestName $ localOption (mkTimeout 500000) $ testCase runGccLdTestName $ do
-            out <- runExe $ name <.> "gcc"
-            out @?= expectedString
-        , testCase mkDummyLdTestName $ ldDummy name
-        , after AllSucceed mkDummyLdTestName $ localOption (mkTimeout 500000) $ testCase runDummyLdTestName $ do
-            out <- runExe $ name <.> "dummy"
-            out @?= expectedString
-        ]
+        ] ++
+        case maybeExpectedString of
+            Just expectedString ->
+                [ testCase mkGccLdTestName $ ldGcc name
+                , after AllSucceed mkGccLdTestName $ localOption (mkTimeout 500000) $ testCase runGccLdTestName $ do
+                    out <- runExe $ name <.> "gcc"
+                    out @?= expectedString
+                , testCase mkDummyLdTestName $ ldDummy name
+                , after AllSucceed mkDummyLdTestName $ localOption (mkTimeout 500000) $ testCase runDummyLdTestName $ do
+                    out <- runExe $ name <.> "dummy"
+                    out @?= expectedString
+                ]
+            Nothing -> []
     ]
     where
         mkObjTestName      = name ++ "_mkobj"
@@ -88,7 +93,8 @@ testExe name code expectedString =
 
 main :: IO ()
 main = defaultMain $ testGroup "tests"
-    (  testExe "helloWorld"   helloWorld   "Hello World!\n"
-    ++ testExe "forwardLabel" forwardLabel "ok\n"
+    (  testExe "helloWorld"   helloWorld   (Just "Hello World!\n")
+    ++ testExe "forwardLabel" forwardLabel (Just "ok\n")
     -- ++ testExe "testBss"      testBss "abcdefghijklmnop\n"
+    ++ testExe "dontRun"      dontRun      Nothing
     )
