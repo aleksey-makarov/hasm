@@ -367,13 +367,11 @@ svc imm = instr $ 0xd4000001 .|. (fromIntegral imm `shift` 5)
 --------------------------------------------------------------------------------
 -- asm directives
 
-ascii :: MonadState CodeState m => String -> m Label
+ascii, asciiz:: MonadState CodeState m => String -> m Label
 ascii s = emitPool 1 l bu
     where
         bu = stringUtf8 s
         l = fromIntegral $ BSL.length $ toLazyByteString bu
-
-asciiz :: MonadState CodeState m => String -> m Label
 asciiz s = ascii (s <> "\0")
 
 word8, byte :: MonadState CodeState m => Word8 -> m Label
