@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -60,6 +61,7 @@ import Control.Exception.ContextTH
 import Control.Monad.Catch hiding (mask)
 import Control.Monad.State as MS
 import Data.Array.Unboxed
+import Data.Bifunctor
 import Data.Bits
 import Data.ByteString.Builder hiding (word8)
 import qualified Data.ByteString.Builder as BSB
@@ -109,14 +111,6 @@ w1 = R 1
 --------------------------------------------------------------------------------
 -- state
 
-data LabelTableEntry
-    = LabelTableAllocated TextAddress
-    | LabelTableUnallocated
-        { lteuAlign  :: Int
-        , lteuLength :: Int
-        , lteuData   :: Builder
-        }
-
 data LabelRelocation
     = LabelRelocation
         { lrLabel      :: Label
@@ -134,17 +128,26 @@ data TextChunk
         , bcData   :: Builder
         }
 
+data LabelTableUnallocatedEntry
+    = LabelTableUnallocatedEntry
+        { ltueIndex  :: Int
+        , ltueAlign  :: Int
+        , ltueLength :: Int
+        , ltueData   :: Builder
+        }
 
 data CodeState
     = CodeState
-        { textOffset         :: TextAddress   -- Should always be aligned by instructionSize
-        , textReversed       :: [TextChunk]
-        , symbolsRefersed    :: [(String, Label)]
-        , labelTableReversed :: [LabelTableEntry]
+        { textOffset            :: TextAddress   -- Should always be aligned by instructionSize
+        , textReversed          :: [TextChunk]
+        , symbolsRefersed       :: [(String, Label)]
+        , labelTableNext        :: Int
+        , labelTableUnallocated :: [LabelTableUnallocatedEntry]
+        , labelTable            :: [(Int, TextAddress)]
         }
 
 codeStateInit :: CodeState
-codeStateInit = CodeState 0 [] [] []
+codeStateInit = CodeState 0 [] [] 0 [] []
 
 offset :: MonadState CodeState m => m TextAddress
 offset = gets textOffset
@@ -206,13 +209,19 @@ align' a | a < 0               = $chainedError "negative align"
 ltorg' :: CodeMonad m => m ()
 ltorg' = do
     let
-        f x@(LabelTableAllocated _) = return x
-        f LabelTableUnallocated { .. } = do
-            align' lteuAlign
-            LabelTableAllocated <$> emitBuilder lteuLength lteuData
-    lt <- gets labelTableReversed
+        f LabelTableUnallocatedEntry { .. } = do
+            align' ltueAlign
+            (ltueIndex, ) <$> emitBuilder ltueLength ltueData
+    lt <- gets labelTableUnallocated
     lt' <- mapM f lt
-    modify (\ x -> x { labelTableReversed = lt' })
+    let
+        fm CodeState { .. } =
+            CodeState
+                { labelTableUnallocated = []
+                , labelTable = lt' ++ labelTable
+                , ..
+                }
+    modify fm
 
 ltorg :: CodeMonad m => m ()
 ltorg = ltorg' >> align' instructionSize -- FIXME: should it be aligned at 8 to be shure it can be jumped to (?)
@@ -227,20 +236,28 @@ align a | a < instructionSize = $chainedError "align is too small"
 --------------------------------------------------------------------------------
 -- pool
 
-emitPool' :: MonadState CodeState m => LabelTableEntry -> m Label
-emitPool' lte = state f where
+emitPool' :: MonadState CodeState m => TextAddress -> m Label
+emitPool' a = state f where
     f CodeState {..} =
-        ( Label $ P.length labelTableReversed
-        , CodeState { labelTableReversed = lte : labelTableReversed
+        ( Label labelTableNext
+        , CodeState { labelTableNext = labelTableNext + 1
+                    , labelTable = (labelTableNext, a) : labelTable
                     , ..
                     }
         )
 
 emitPool :: MonadState CodeState m => Int -> Int -> Builder -> m Label
-emitPool lteuAlign lteuLength lteuData = emitPool' $ LabelTableUnallocated { .. }
+emitPool ltueAlign ltueLength ltueData = state f where
+    f CodeState {..} = let ltueIndex = labelTableNext in
+        ( Label labelTableNext
+        , CodeState { labelTableNext = labelTableNext + 1
+                    , labelTableUnallocated = (LabelTableUnallocatedEntry { .. }) : labelTableUnallocated
+                    , ..
+                    }
+        )
 
 label :: MonadState CodeState m => m Label
-label = LabelTableAllocated <$> offset >>= emitPool'
+label = offset >>= emitPool'
 
 --------------------------------------------------------------------------------
 -- instructions
@@ -442,17 +459,8 @@ assemble m = do
     let
         -- labels
 
-        labelTable = P.reverse labelTableReversed
-        labelTableLength = P.length labelTable
-
-        fLabel :: LabelTableEntry -> Int64
-        fLabel (LabelTableAllocated o) = getTextAddress o
-        fLabel _ = error "internal error: some Labels are not allocated"
-
         labelArray :: UArray Int Int64
-        labelArray = if not (labelTableLength > 0)
-            then error "internal error: no Labels defined, an attempt to resolve a Label"
-            else array (0, labelTableLength - 1) (P.zip [0 ..] $ P.map fLabel $ labelTable)
+        labelArray = array (0, P.length labelTable - 1) (P.map (bimap id getTextAddress) labelTable)
 
         labelToTextAddress :: Label -> TextAddress
         labelToTextAddress (Label i) = TextAddress $ labelArray ! i
