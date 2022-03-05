@@ -445,38 +445,73 @@ relocate rl _ _ _ _ = $chainedError ("relocation is not implemented: " <> show r
 zeroIndexStringItem :: ElfSymbolXX 'ELFCLASS64
 zeroIndexStringItem = ElfSymbolXX "" 0 0 0 0 0
 
+data ElfCompositionState a
+    = ElfCompositionState
+        { ecsNextSectionN :: ElfSectionIndex
+        , ecsElfReversed  :: [ElfXX a]
+        }
+
+elfCompositionStateInit :: IsElfClass a => ElfCompositionState a
+elfCompositionStateInit = ElfCompositionState 1 [h]
+    where
+        h = ElfHeader
+            { ehData       = ELFDATA2LSB
+            , ehOSABI      = ELFOSABI_SYSV
+            , ehABIVersion = 0
+            , ehType       = ET_REL
+            , ehMachine    = EM_AARCH64
+            , ehEntry      = 0
+            , ehFlags      = 0
+            }
+
+getNextSectionN :: Monad m => StateT (ElfCompositionState a) m ElfSectionIndex
+getNextSectionN = state f
+    where
+        f (ElfCompositionState { .. }) =
+            ( ecsNextSectionN
+            , ElfCompositionState
+                { ecsNextSectionN = ecsNextSectionN + 1
+                , ..
+                }
+            )
+
+addNewSection :: Monad m => ElfXX a -> StateT (ElfCompositionState a) m ()
+addNewSection e = modify f
+    where
+        f (ElfCompositionState { .. }) =
+            ElfCompositionState
+                { ecsElfReversed = e : ecsElfReversed
+                , ..
+                }
+
 assemble :: forall m . MonadCatch m => StateT CodeState m () -> m Elf
 assemble m = do
 
     CodeState {..} <- execStateT (m >> ltorg') codeStateInit
 
-    let
+    ElfCompositionState { .. } <- flip execStateT (elfCompositionStateInit @'ELFCLASS64) $ do
+
         -- labels
+        let
+            labelArray :: UArray Int Int64
+            labelArray = array (0, P.length labelTable - 1) (P.map (bimap id getTextAddress) labelTable)
 
-        labelArray :: UArray Int Int64
-        labelArray = array (0, P.length labelTable - 1) (P.map (bimap id getTextAddress) labelTable)
-
-        labelToTextAddress :: Label -> TextAddress
-        labelToTextAddress (Label i) = TextAddress $ labelArray ! i
+            labelToTextAddress :: Label -> TextAddress
+            labelToTextAddress (Label i) = TextAddress $ labelArray ! i
 
         -- txt
-
-        text = P.reverse textReversed
-
-        fTxt' :: MonadThrow m => Instruction -> Maybe LabelRelocation -> m Instruction
-        fTxt' i Nothing                         = return i
-        fTxt' i (Just (LabelRelocation { .. })) = relocate lrRelocation i lrAddress (labelToTextAddress lrLabel) 0
-
-        fTxt :: MonadThrow m => TextChunk -> m Builder
-        fTxt (InstructionChunk i rl) = word32LE <$> getInstruction <$> fTxt' i rl
-        fTxt (BuilderChunk _ bu) = return bu
-
-    txt <- toLazyByteString <$> mconcat <$> mapM fTxt text
-
-    flip evalStateT 1 $ do
-
         let
-            getNextSectionN = state $ \ n -> (n, n + 1)
+            text = P.reverse textReversed
+
+            fTxt' :: MonadThrow m' => Instruction -> Maybe LabelRelocation -> m' Instruction
+            fTxt' i Nothing                         = return i
+            fTxt' i (Just (LabelRelocation { .. })) = relocate lrRelocation i lrAddress (labelToTextAddress lrLabel) 0
+
+            fTxt :: MonadThrow m' => TextChunk -> m' Builder
+            fTxt (InstructionChunk i rl) = word32LE <$> getInstruction <$> fTxt' i rl
+            fTxt (BuilderChunk _ bu) = return bu
+
+        txt <- toLazyByteString <$> mconcat <$> mapM fTxt text
 
         textSecN     <- getNextSectionN
         shstrtabSecN <- getNextSectionN
@@ -506,17 +541,8 @@ assemble m = do
 
         (symbolTableData, stringTableData) <- serializeSymbolTable ELFDATA2LSB (zeroIndexStringItem : symbolTable)
 
-        return $ SELFCLASS64 :&: ElfList
-            [ ElfHeader
-                { ehData       = ELFDATA2LSB
-                , ehOSABI      = ELFOSABI_SYSV
-                , ehABIVersion = 0
-                , ehType       = ET_REL
-                , ehMachine    = EM_AARCH64
-                , ehEntry      = 0
-                , ehFlags      = 0
-                }
-            , ElfSection
+        addNewSection
+            ElfSection
                 { esName      = ".text"
                 , esType      = SHT_PROGBITS
                 , esFlags     = SHF_EXECINSTR .|. SHF_ALLOC
@@ -528,7 +554,9 @@ assemble m = do
                 , esInfo      = 0
                 , esData      = ElfSectionData txt
                 }
-            , ElfSection
+
+        addNewSection
+            ElfSection
                 { esName      = ".shstrtab"
                 , esType      = SHT_STRTAB
                 , esFlags     = 0
@@ -540,7 +568,9 @@ assemble m = do
                 , esInfo      = 0
                 , esData      = ElfSectionDataStringTable
                 }
-            , ElfSection
+
+        addNewSection
+            ElfSection
                 { esName      = ".symtab"
                 , esType      = SHT_SYMTAB
                 , esFlags     = 0
@@ -552,7 +582,9 @@ assemble m = do
                 , esInfo      = 1
                 , esData      = ElfSectionData symbolTableData
                 }
-            , ElfSection
+
+        addNewSection
+            ElfSection
                 { esName      = ".strtab"
                 , esType      = SHT_STRTAB
                 , esFlags     = 0
@@ -564,5 +596,7 @@ assemble m = do
                 , esInfo      = 0
                 , esData      = ElfSectionData stringTableData
                 }
-            , ElfSectionTable
-            ]
+
+        addNewSection ElfSectionTable
+
+    return $ SELFCLASS64 :&: (ElfList $ P.reverse ecsElfReversed)
