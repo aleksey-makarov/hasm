@@ -445,13 +445,7 @@ relocate rl _ _ _ _ = $chainedError ("relocation is not implemented: " <> show r
 zeroIndexStringItem :: ElfSymbolXX 'ELFCLASS64
 zeroIndexStringItem = ElfSymbolXX "" 0 0 0 0 0
 
-textSecN, shstrtabSecN, strtabSecN, symtabSecN :: ElfSectionIndex
-textSecN     = 1
-shstrtabSecN = 2
-strtabSecN   = 3
-symtabSecN   = 4
-
-assemble :: MonadCatch m => StateT CodeState m () -> m Elf
+assemble :: forall m . MonadCatch m => StateT CodeState m () -> m Elf
 assemble m = do
 
     CodeState {..} <- execStateT (m >> ltorg') codeStateInit
@@ -479,86 +473,96 @@ assemble m = do
 
     txt <- toLazyByteString <$> mconcat <$> mapM fTxt text
 
+    flip evalStateT 1 $ do
+
+        let
+            getNextSectionN = state $ \ n -> (n, n + 1)
+
+        textSecN     <- getNextSectionN
+        shstrtabSecN <- getNextSectionN
+        strtabSecN   <- getNextSectionN
+        symtabSecN   <- getNextSectionN
+
         -- symbols
 
-    let
-        symbols = P.reverse symbolsRefersed
+        let
+            symbols = P.reverse symbolsRefersed
 
-        fSymbol :: (String, Label) -> ElfSymbolXX 'ELFCLASS64
-        fSymbol (s, l) =
-            let
-                steName  = s
-                steBind  = STB_Global
-                steType  = STT_NoType
-                steShNdx = textSecN
-                steValue = fromIntegral $ getTextAddress $ labelToTextAddress l
-                steSize  = 0
-            in
-                ElfSymbolXX{..}
+            fSymbol :: (String, Label) -> ElfSymbolXX 'ELFCLASS64
+            fSymbol (s, l) =
+                let
+                    steName  = s
+                    steBind  = STB_Global
+                    steType  = STT_NoType
+                    steShNdx = textSecN
+                    steValue = fromIntegral $ getTextAddress $ labelToTextAddress l
+                    steSize  = 0
+                in
+                    ElfSymbolXX{..}
 
-        symbolTable = fSymbol <$> symbols
+            symbolTable = fSymbol <$> symbols
 
-    -- resolve symbolTable
+        -- resolve symbolTable
 
-    (symbolTableData, stringTableData) <- serializeSymbolTable ELFDATA2LSB (zeroIndexStringItem : symbolTable)
+        (symbolTableData, stringTableData) <- serializeSymbolTable ELFDATA2LSB (zeroIndexStringItem : symbolTable)
 
-    return $ SELFCLASS64 :&: ElfList
-        [ ElfHeader
-            { ehData       = ELFDATA2LSB
-            , ehOSABI      = ELFOSABI_SYSV
-            , ehABIVersion = 0
-            , ehType       = ET_REL
-            , ehMachine    = EM_AARCH64
-            , ehEntry      = 0
-            , ehFlags      = 0
-            }
-        , ElfSection
-            { esName      = ".text"
-            , esType      = SHT_PROGBITS
-            , esFlags     = SHF_EXECINSTR .|. SHF_ALLOC
-            , esAddr      = 0
-            , esAddrAlign = 8
-            , esEntSize   = 0
-            , esN         = textSecN
-            , esLink      = 0
-            , esInfo      = 0
-            , esData      = ElfSectionData txt
-            }
-        , ElfSection
-            { esName      = ".shstrtab"
-            , esType      = SHT_STRTAB
-            , esFlags     = 0
-            , esAddr      = 0
-            , esAddrAlign = 1
-            , esEntSize   = 0
-            , esN         = shstrtabSecN
-            , esLink      = 0
-            , esInfo      = 0
-            , esData      = ElfSectionDataStringTable
-            }
-        , ElfSection
-            { esName      = ".symtab"
-            , esType      = SHT_SYMTAB
-            , esFlags     = 0
-            , esAddr      = 0
-            , esAddrAlign = 8
-            , esEntSize   = symbolTableEntrySize ELFCLASS64
-            , esN         = symtabSecN
-            , esLink      = fromIntegral strtabSecN
-            , esInfo      = 1
-            , esData      = ElfSectionData symbolTableData
-            }
-        , ElfSection
-            { esName      = ".strtab"
-            , esType      = SHT_STRTAB
-            , esFlags     = 0
-            , esAddr      = 0
-            , esAddrAlign = 1
-            , esEntSize   = 0
-            , esN         = strtabSecN
-            , esLink      = 0
-            , esInfo      = 0
-            , esData      = ElfSectionData stringTableData
-            }
-        , ElfSectionTable
-        ]
+        return $ SELFCLASS64 :&: ElfList
+            [ ElfHeader
+                { ehData       = ELFDATA2LSB
+                , ehOSABI      = ELFOSABI_SYSV
+                , ehABIVersion = 0
+                , ehType       = ET_REL
+                , ehMachine    = EM_AARCH64
+                , ehEntry      = 0
+                , ehFlags      = 0
+                }
+            , ElfSection
+                { esName      = ".text"
+                , esType      = SHT_PROGBITS
+                , esFlags     = SHF_EXECINSTR .|. SHF_ALLOC
+                , esAddr      = 0
+                , esAddrAlign = 8
+                , esEntSize   = 0
+                , esN         = textSecN
+                , esLink      = 0
+                , esInfo      = 0
+                , esData      = ElfSectionData txt
+                }
+            , ElfSection
+                { esName      = ".shstrtab"
+                , esType      = SHT_STRTAB
+                , esFlags     = 0
+                , esAddr      = 0
+                , esAddrAlign = 1
+                , esEntSize   = 0
+                , esN         = shstrtabSecN
+                , esLink      = 0
+                , esInfo      = 0
+                , esData      = ElfSectionDataStringTable
+                }
+            , ElfSection
+                { esName      = ".symtab"
+                , esType      = SHT_SYMTAB
+                , esFlags     = 0
+                , esAddr      = 0
+                , esAddrAlign = 8
+                , esEntSize   = symbolTableEntrySize ELFCLASS64
+                , esN         = symtabSecN
+                , esLink      = fromIntegral strtabSecN
+                , esInfo      = 1
+                , esData      = ElfSectionData symbolTableData
+                }
+            , ElfSection
+                { esName      = ".strtab"
+                , esType      = SHT_STRTAB
+                , esFlags     = 0
+                , esAddr      = 0
+                , esAddrAlign = 1
+                , esEntSize   = 0
+                , esN         = strtabSecN
+                , esLink      = 0
+                , esInfo      = 0
+                , esData      = ElfSectionData stringTableData
+                }
+            , ElfSectionTable
+            ]
