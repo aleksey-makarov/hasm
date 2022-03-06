@@ -1,5 +1,7 @@
 module Main (main) where
 
+import Prelude as P
+
 import Control.Monad.State as MS
 import Data.Bits
 import Data.ByteString as BS
@@ -12,13 +14,14 @@ import Test.Tasty
 import Test.Tasty.Golden
 import Test.Tasty.HUnit
 
-import Asm.AsmAArch64
+import Asm.Asm
+import Asm.AArch64
 import Asm.DummyLd
 
-import Code.HelloWorld
-import Code.ForwardLabel
--- import Code.TestBss
-import Code.DontRun
+import Code.AArch64.HelloWorld
+import Code.AArch64.ForwardLabel
+-- import Code.AArch64.TestBss
+import Code.AArch64.DontRun
 
 testsOutDir :: FilePath
 testsOutDir = "tests" </> "out"
@@ -37,7 +40,7 @@ runExe name = readProcess "qemu-aarch64" [f] []
     where
         f = testsOutDir </> name
 
-mkObj :: String -> StateT CodeState IO () -> IO ()
+mkObj :: String -> StateT (CodeState AArch64) IO () -> IO ()
 mkObj name code = assemble code >>= serializeElf >>= BSL.writeFile n
     where
         n = testsOutDir </> name <.> "o"
@@ -57,7 +60,7 @@ ldGcc name = callProcess "aarch64-unknown-linux-gnu-gcc" [i, "-nostdlib", "-o", 
         o = testsOutDir </> name <.> "gcc"
 
 
-testExe :: String -> StateT CodeState IO () -> Maybe String -> [ TestTree ]
+testExe :: String -> StateT (CodeState AArch64) IO () -> Maybe String -> [ TestTree ]
 testExe name code maybeExpectedString =
     [ testCase mkObjTestName $ mkObj name code
     , after AllSucceed mkObjTestName $ testGroup checkObjTestName $

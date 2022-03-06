@@ -1,17 +1,19 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MonoLocalBinds #-}
 
-module Code.TestBss (testBss) where
+module Code.AArch64.TestBss (testBss) where
 
 import Data.Word
 
-import Asm.AsmAArch64
+import Asm.Asm
+import Asm.AArch64
 
 -- | syscalls
 sysExit :: Word16
 sysExit = 93
 
-testBss :: CodeMonad m => m ()
+testBss :: CodeMonad AArch64 m => m ()
 testBss = do
 
     movz x0 $ LSL0 0

@@ -1,14 +1,16 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE MonoLocalBinds #-}
 
-module Code.DontRun (dontRun) where
+module Code.AArch64.DontRun (dontRun) where
 
 import Prelude as P
 
-import Asm.AsmAArch64
+import Asm.Asm
+import Asm.AArch64
 
-dontRun :: CodeMonad m => m ()
+dontRun :: CodeMonad AArch64 m => m ()
 dontRun = do
 
     label >>= exportSymbol "_start"

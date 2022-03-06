@@ -1,15 +1,17 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE RecursiveDo #-}
 
-module Code.ForwardLabel (forwardLabel) where
+module Code.AArch64.ForwardLabel (forwardLabel) where
 
 import Prelude as P
 
 import Control.Monad.Fix
 import Data.Word
 
-import Asm.AsmAArch64
+import Asm.Asm
+import Asm.AArch64
 
 ok :: String
 ok = "ok\n"
@@ -22,7 +24,7 @@ sysExit, sysWrite :: Word16
 sysWrite = 64
 sysExit = 93
 
-forwardLabel :: (CodeMonad m, MonadFix m) => m ()
+forwardLabel :: (CodeMonad AArch64 m, MonadFix m) => m ()
 forwardLabel = mdo
 
     label >>= exportSymbol "_start"

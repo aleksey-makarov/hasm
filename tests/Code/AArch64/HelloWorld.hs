@@ -1,15 +1,17 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE RecursiveDo #-}
 
-module Code.HelloWorld (helloWorld) where
+module Code.AArch64.HelloWorld (helloWorld) where
 
 import Prelude as P
 
 import Control.Monad.State
 import Data.Word
 
-import Asm.AsmAArch64
+import Asm.Asm
+import Asm.AArch64
 
 msg :: String
 msg = "Hello World!\n"
@@ -19,7 +21,7 @@ sysExit, sysWrite :: Word16
 sysWrite = 64
 sysExit = 93
 
-helloWorld :: (CodeMonad m, MonadFix m) => m ()
+helloWorld :: (CodeMonad AArch64 m, MonadFix m) => m ()
 helloWorld = mdo
 
     start <- label
