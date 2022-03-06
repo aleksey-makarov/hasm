@@ -491,7 +491,10 @@ assemble m = do
 
     ElfCompositionState { .. } <- flip execStateT (elfCompositionStateInit @'ELFCLASS64) $ do
 
+        ---------------------------------------------------------------------
         -- labels
+        ---------------------------------------------------------------------
+
         let
             labelArray :: UArray Int Int64
             labelArray = array (0, P.length labelTable - 1) (P.map (bimap id getTextAddress) labelTable)
@@ -499,7 +502,10 @@ assemble m = do
             labelToTextAddress :: Label -> TextAddress
             labelToTextAddress (Label i) = TextAddress $ labelArray ! i
 
+        ---------------------------------------------------------------------
         -- txt
+        ---------------------------------------------------------------------
+
         let
             text = P.reverse textReversed
 
@@ -512,13 +518,43 @@ assemble m = do
             fTxt (BuilderChunk _ bu) = return bu
 
         txt <- toLazyByteString <$> mconcat <$> mapM fTxt text
+        textSecN <- getNextSectionN
+        addNewSection
+            ElfSection
+                { esName      = ".text"
+                , esType      = SHT_PROGBITS
+                , esFlags     = SHF_EXECINSTR .|. SHF_ALLOC
+                , esAddr      = 0
+                , esAddrAlign = 8
+                , esEntSize   = 0
+                , esN         = textSecN
+                , esLink      = 0
+                , esInfo      = 0
+                , esData      = ElfSectionData txt
+                }
 
-        textSecN     <- getNextSectionN
+        ---------------------------------------------------------------------
+        -- symbols section
+        ---------------------------------------------------------------------
+
         shstrtabSecN <- getNextSectionN
-        strtabSecN   <- getNextSectionN
-        symtabSecN   <- getNextSectionN
+        addNewSection
+            ElfSection
+                { esName      = ".shstrtab"
+                , esType      = SHT_STRTAB
+                , esFlags     = 0
+                , esAddr      = 0
+                , esAddrAlign = 1
+                , esEntSize   = 0
+                , esN         = shstrtabSecN
+                , esLink      = 0
+                , esInfo      = 0
+                , esData      = ElfSectionDataStringTable
+                }
 
+        ---------------------------------------------------------------------
         -- symbols
+        ---------------------------------------------------------------------
 
         let
             symbols = P.reverse symbolsRefersed
@@ -537,37 +573,10 @@ assemble m = do
 
             symbolTable = fSymbol <$> symbols
 
-        -- resolve symbolTable
-
         (symbolTableData, stringTableData) <- serializeSymbolTable ELFDATA2LSB (zeroIndexStringItem : symbolTable)
 
-        addNewSection
-            ElfSection
-                { esName      = ".text"
-                , esType      = SHT_PROGBITS
-                , esFlags     = SHF_EXECINSTR .|. SHF_ALLOC
-                , esAddr      = 0
-                , esAddrAlign = 8
-                , esEntSize   = 0
-                , esN         = textSecN
-                , esLink      = 0
-                , esInfo      = 0
-                , esData      = ElfSectionData txt
-                }
-
-        addNewSection
-            ElfSection
-                { esName      = ".shstrtab"
-                , esType      = SHT_STRTAB
-                , esFlags     = 0
-                , esAddr      = 0
-                , esAddrAlign = 1
-                , esEntSize   = 0
-                , esN         = shstrtabSecN
-                , esLink      = 0
-                , esInfo      = 0
-                , esData      = ElfSectionDataStringTable
-                }
+        strtabSecN   <- getNextSectionN
+        symtabSecN   <- getNextSectionN
 
         addNewSection
             ElfSection
@@ -596,6 +605,10 @@ assemble m = do
                 , esInfo      = 0
                 , esData      = ElfSectionData stringTableData
                 }
+
+        ---------------------------------------------------------------------
+        -- section table
+        ---------------------------------------------------------------------
 
         addNewSection ElfSectionTable
 
