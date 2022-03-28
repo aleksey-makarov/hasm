@@ -1,7 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE MonoLocalBinds #-}
 
 module Code.AArch64.DontRun (dontRun) where
 

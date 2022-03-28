@@ -77,7 +77,7 @@ class KnownArch a where
                             Int64 -> m (Instruction a)
     serializeInstruction :: Instruction a -> Builder
 
-type CodeMonad a m = (KnownArch a, MonadThrow m, MonadState (CodeState a) m)
+type CodeMonad a m = (MonadThrow m, MonadState (CodeState a) m)
 newtype Label = Label Int
 
 --------------------------------------------------------------------------------
@@ -127,7 +127,7 @@ offset = gets textOffset
 --------------------------------------------------------------------------------
 -- text
 
-emitChunk :: CodeMonad a m => TextChunk a -> m TextAddress
+emitChunk :: (KnownArch a, CodeMonad a m) => TextChunk a -> m TextAddress
 emitChunk c = state f where
     f CodeState {..} =
         ( textOffset
@@ -140,32 +140,32 @@ emitChunk c = state f where
         InstructionChunk i _ -> instructionSize i
         BuilderChunk i _ -> fromIntegral i
 
-emit' :: CodeMonad a m => Instruction a -> Maybe (LabelRelocation a) -> m TextAddress
+emit' :: (KnownArch a, CodeMonad a m) => Instruction a -> Maybe (LabelRelocation a) -> m TextAddress
 emit' i lr = emitChunk $ InstructionChunk i lr
 
-emit :: CodeMonad a m => Instruction a -> m ()
+emit :: (KnownArch a, CodeMonad a m) => Instruction a -> m ()
 emit i = void $ emit' i Nothing
 
-emitReloc :: CodeMonad a m => Instruction a -> Label -> RelocationType a -> m ()
+emitReloc :: (KnownArch a, CodeMonad a m) => Instruction a -> Label -> RelocationType a -> m ()
 emitReloc i l r = do
     o <- offset
     void $ emit' i (Just $ LabelRelocation l r o)
 
 -- IMPORTANT: this can leave text array in unaligned state so
 -- this should not be exported
-emitBuilder :: CodeMonad a m => Int -> Builder -> m TextAddress
+emitBuilder :: (KnownArch a, CodeMonad a m) => Int -> Builder -> m TextAddress
 emitBuilder l bu | l < 0     = error "internal error: chunk length < 0"
                  | l == 0    = offset
                  | otherwise = emitChunk $ BuilderChunk l bu
 
 -- IMPORTANT: this can leave text array in unaligned state so
 -- this should not be exported
-emitBuilderN :: CodeMonad a m => Int -> m ()
+emitBuilderN :: (KnownArch a, CodeMonad a m) => Int -> m ()
 emitBuilderN n = void $ emitBuilder n $ mconcat $ P.map BSB.word8 $ P.replicate n 0
 
 -- IMPORTANT: this can leave text array in unaligned state so
 -- this should not be exported
-align' :: CodeMonad a m => Int -> m ()
+align' :: (KnownArch a, CodeMonad a m) => Int -> m ()
 align' 0                       = return ()
 align' 1                       = return ()
 align' a | a < 0               = $chainedError "negative align"
@@ -178,7 +178,7 @@ align' a | a < 0               = $chainedError "negative align"
     emitBuilderN l
 
 -- FIXME: Optimize the order of allocations
-ltorg' :: CodeMonad a m => m ()
+ltorg' :: (KnownArch a, CodeMonad a m) => m ()
 ltorg' = do
     let
         f LabelTableUnallocatedEntry { .. } = do
@@ -195,10 +195,10 @@ ltorg' = do
                 }
     modify fm
 
-ltorg :: forall a m . CodeMonad a m => m ()
+ltorg :: forall a m . (KnownArch a, CodeMonad a m) => m ()
 ltorg = ltorg' >> align' (ltorgAlign (Proxy @a))
 
-align :: forall a m . CodeMonad a m => Int -> m ()
+align :: forall a m . (KnownArch a, CodeMonad a m) => Int -> m ()
 align a | a < (ltorgAlign (Proxy @a)) = $chainedError "align is too small"
         | otherwise                   = align' a
 

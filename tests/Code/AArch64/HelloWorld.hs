@@ -1,6 +1,5 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE RecursiveDo #-}
 
 module Code.AArch64.HelloWorld (helloWorld) where
