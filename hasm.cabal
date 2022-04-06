@@ -34,6 +34,7 @@ library
       Asm.DummyLd
   other-modules:
       Asm.Data
+      Asm.Relocation
       Paths_hasm
   hs-source-dirs:
       src

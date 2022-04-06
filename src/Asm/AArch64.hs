@@ -46,6 +46,7 @@ import Data.Word
 
 import Asm.Asm
 import Asm.Data
+import Asm.Relocation
 
 $(singletons [d| data RegisterWidth = X | W |])
 
@@ -55,9 +56,10 @@ instance KnownArch AArch64 where
     data Instruction AArch64 = Instruction { getInstruction :: Word32 } -- deriving (Eq, Show, Ord, Num, Enum, Real, Integral, Bits, FiniteBits)
     instructionSize = const 4
     ltorgAlign = const 4
-    type RelocationType AArch64 = ElfRelocationType_AARCH64
-    relocate = relocate'
     serializeInstruction = word32LE . getInstruction
+    mkRelocation = mkRelocation'
+
+type instance RelocationType AArch64 = ElfRelocationType_AARCH64
 
 type Register :: RegisterWidth -> Type
 newtype Register c = R Word32
@@ -84,10 +86,10 @@ type Word26 = Word32
 instr :: CodeMonad AArch64 m => Word32 -> m ()
 instr w = void $ emit (Instruction w)
 
-instrReloc :: CodeMonad AArch64 m => Word32 -> Label -> ElfRelocationType_AARCH64 -> m ()
+instrReloc :: CodeMonad AArch64 m => Word32 -> Symbol -> ElfRelocationType_AARCH64 -> m ()
 instrReloc w l r = emitReloc (Instruction w) l r
 
--- emitReloc :: CodeMonad a m => Instruction a -> Label -> ElfRelocationType_AARCH64 -> m ()
+-- emitReloc :: CodeMonad a m => Instruction a -> Symbol -> ElfRelocationType_AARCH64 -> m ()
 -- emitReloc w l r = do
 --     a <- offset
 --     void $ emit (Instruction w) (Just $ LabelRelocation l r a)
@@ -105,7 +107,7 @@ class ArgADR w where
     adr :: CodeMonad AArch64 m => Register 'X -> w -> m ()
 instance ArgADR Word21 where
     adr r w = instr $ adr_ r w
-instance ArgADR Label where
+instance ArgADR Symbol where
     adr r l = instrReloc (adr_ r 0) l R_AARCH64_ADR_PREL_LO21
 
 -- offsetToImm21 :: MonadThrow m => TextAddress -> m Word21
@@ -123,7 +125,7 @@ class ArgB w where
     b :: CodeMonad AArch64 m => w -> m ()
 instance ArgB Word26 where
     b imm26 = instr $ b_ imm26
-instance ArgB Label where
+instance ArgB Symbol where
     b l = instrReloc (b_ 0) l R_AARCH64_JUMP26
 
 -- offsetToImm26 :: MonadThrow m => TextAddress -> m Word26
@@ -187,24 +189,28 @@ ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
 svc ::CodeMonad AArch64 m => Word16 -> m ()
 svc imm = instr $ 0xd4000001 .|. (fromIntegral imm `shift` 5)
 
-relocate' ::      MonadThrow m =>
+mkRelocation' ::
+                 MonadThrow m =>
     ElfRelocationType_AARCH64 ->
-          Instruction AArch64 ->
-                  TextAddress ->
-                  TextAddress ->
-                        Int64 -> m (Instruction AArch64)
-relocate' R_AARCH64_JUMP26 (Instruction w) (TextAddress p) (TextAddress s) a = do
+                  TextAddress -> -- p (he address of the place being relocated)
+                  TextAddress -> -- s (is the address of the symbol)
+                        Int64 -> -- a (the addend for the relocation)
+                                 m RelocationMonad
+mkRelocation' R_AARCH64_JUMP26 p@(TextAddress p') (TextAddress s) a = do
     let
-        x = (s + a - p) `shiftR` 2
+        x = (s + a - p') `shiftR` 2
     imm <- $maybeAddContext "imm does not fit" $ fitN 26 x
-    return $ Instruction $ (w .&. 0xfc000000) .|. imm
-relocate' R_AARCH64_ADR_PREL_LO21 (Instruction w) (TextAddress p) (TextAddress s) a = do
     let
-        x = (s + a - p)
+        f w = (w .&. 0xfc000000) .|. imm
+    return $ modifyWord32LE p f
+mkRelocation' R_AARCH64_ADR_PREL_LO21 p@(TextAddress p') (TextAddress s) a = do
+    let
+        x = (s + a - p')
     imm21 <- $maybeAddContext "imm does not fit" $ fitN 21 x
     let
         immlo = imm21 .&. 3
         immhi = imm21 `shiftR` 2
         imm   = (immhi `shift` 5) .|. (immlo `shift` 29)
-    return $ Instruction $ (w .&. 0x9f00001f) .|. imm
-relocate' rl _ _ _ _ = $chainedError ("relocation is not implemented: " <> show rl)
+        f w = (w .&. 0x9f00001f) .|. imm
+    return $ modifyWord32LE p f
+mkRelocation' rl _ _ _ = $chainedError ("relocation is not implemented: " <> show rl)

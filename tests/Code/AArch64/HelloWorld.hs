@@ -23,8 +23,7 @@ sysExit = 93
 helloWorld :: (CodeMonad AArch64 m, MonadFix m) => m ()
 helloWorld = mdo
 
-    start <- label
-    exportSymbol "_start" start
+    void $ exportSymbol "_start"
     movz x0 $ LSL0 1
     helloString <- ascii msg
     adr x1 helloString

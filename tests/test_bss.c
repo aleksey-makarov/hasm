@@ -4,9 +4,16 @@
 
 #define ARR_LENGTH 16
 
-static char arr[ARR_LENGTH];
 extern int write(int, void *, int);
 extern void exit(int);
+
+void fi(int *i) {}
+void fd(double *d) {}
+
+static double d1;
+static char arr[ARR_LENGTH];
+static int i1;
+static int i2;
 
 int main(void) {
     int i;
@@ -14,5 +21,9 @@ int main(void) {
         arr[i] = 'a' + i;
     }
     write(1, arr, ARR_LENGTH);
+    fi(&i1);
+    fi(&i2);
+    fd(&d1);
+
     return 0;
 }

@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving  #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -13,15 +14,19 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeOperators #-}
+
+-- https://lisha.ufsc.br/teaching/os/exercise/where_is_my_variable.html
 
 module Asm.Asm
     (
     -- * Data
       CodeState
     , CodeMonad
-    , Label
+    , Symbol
     , KnownArch (..)
+    , RelocationType
 
     -- * Assembler directives
     , label
@@ -31,6 +36,7 @@ module Asm.Asm
     , emit
     , emitReloc
     , align
+    , allocateBSS
 
     , ascii, asciiz
     , byte, short, word, long
@@ -45,87 +51,117 @@ import Prelude as P
 import Control.Exception.ContextTH
 import Control.Monad.Catch hiding (mask)
 import Control.Monad.State as MS
-import Data.Array.Unboxed
-import Data.Bifunctor
+import Data.Array.IArray
 import Data.Bits
 import Data.ByteString.Builder hiding (word8)
 import qualified Data.ByteString.Builder as BSB
 import Data.ByteString.Lazy as BSL
--- Data.ByteString.Lazy.Char8 as BSLC
 import Data.Elf
 import Data.Elf.Constants
 import Data.Elf.Headers
+import Data.Foldable
 import Data.Int
 import Data.Kind
--- import Data.List (sortOn)
+import Data.List (sortOn)
 import Data.Singletons.Sigma
 import Data.Singletons.TH
 import Data.Word
 
 import Asm.Data
+import Asm.Relocation
 
 class KnownArch a where
     data Instruction a :: Type
+
     instructionSize :: Num b => Instruction a -> b
     ltorgAlign :: Proxy a -> Int
-    type RelocationType a :: Type
-    relocate ::      MonadThrow m =>
-                 RelocationType a ->
-                    Instruction a ->
-                      TextAddress ->
-                      TextAddress ->
-                            Int64 -> m (Instruction a)
     serializeInstruction :: Instruction a -> Builder
+    mkRelocation ::
+            MonadThrow m =>
+        RelocationType a ->
+             TextAddress -> -- p (he address of the place being relocated)
+             TextAddress -> -- s (is the address of the symbol)
+                   Int64 -> -- a (the addend for the relocation)
+                             m RelocationMonad
+
+type family RelocationType a = t | t -> a
 
 type CodeMonad a m = (MonadThrow m, MonadState (CodeState a) m)
-newtype Label = Label Int
+data Symbol = Symbol Int
 
 --------------------------------------------------------------------------------
 -- state
 
-data LabelRelocation a
-    = LabelRelocation
-        { lrLabel      :: Label
-        , lrRelocation :: RelocationType a
-        , lrAddress    :: TextAddress
-        }
-
 data TextChunk a
     = InstructionChunk
         { _icInstruction :: Instruction a
-        , _icRelocation :: Maybe (LabelRelocation a)
+        -- , _icRelocation :: Maybe (LabelRelocation a)
         }
     | BuilderChunk
         { _bcLength :: Int
         , _bcData   :: Builder
         }
 
-data LabelTableUnallocatedEntry
-    = LabelTableUnallocatedEntry
-        { ltueIndex  :: Int
-        , ltueAlign  :: Int
-        , ltueLength :: Int
-        , ltueData   :: Builder
+data SymbolTableItem
+    = SymbolTableItemTxtUnallocated
+        { stiTxtUN      :: Int
+        , stiTxtUAlign  :: Int
+        , stiTxtULength :: Int
+        , stiTxtUData   :: Builder
+        }
+    | SymbolTableItemTxt
+        { stiTxtN      :: Int
+        , stiTxtName   :: Maybe String
+        , stiTxtOffset :: TextAddress
+        }
+    -- | SymbolTableItemTxtExternal
+    --     { stiTxtEN      :: Int
+    --     , stiTxtEName   :: String
+    --     , stiTxtEOffset :: TextAddress
+    --     }
+    | SymbolTableItemBSSUnallocated
+        { stiBSSUN      :: Int
+        , stiBSSUAlign  :: Int
+        , stiBSSULength :: Int
+        }
+    | SymbolTableItemBSS
+        { -- stiBSSN      :: Int
+        -- , stiBSSOffset :: Int64
+        }
+
+data RelocationTableItem a
+    = RelocationTableItem
+        { lrSymbol     :: Symbol
+        , lrRelocation :: RelocationType a
+        , lrAddress    :: TextAddress
         }
 
 data CodeState a
     = CodeState
         { textOffset            :: TextAddress   -- Should always be aligned by instructionSize
         , textReversed          :: [TextChunk a]
-        , symbolsRefersed       :: [(String, Label)]
-        , labelTableNext        :: Int
-        , labelTableUnallocated :: [LabelTableUnallocatedEntry]
-        , labelTable            :: [(Int, TextAddress)]
+
+        , symbolsNext           :: Int
+        , symbolsReversed       :: [SymbolTableItem]
+
+        , relocations           :: [RelocationTableItem a]
         }
 
 codeStateInit :: CodeState a
-codeStateInit = CodeState 0 [] [] 0 [] []
+codeStateInit = CodeState 0 [] 0 [] []
 
 offset :: MonadState (CodeState a) m => m TextAddress
 offset = gets textOffset
 
 --------------------------------------------------------------------------------
 -- text
+
+addRelocation :: (KnownArch a, CodeMonad a m) => RelocationTableItem a -> m ()
+addRelocation c = modify f where
+    f CodeState {..} =
+        CodeState { relocations = c : relocations
+                  , ..
+                  }
 
 emitChunk :: (KnownArch a, CodeMonad a m) => TextChunk a -> m TextAddress
 emitChunk c = state f where
@@ -137,19 +173,17 @@ emitChunk c = state f where
                     }
         )
     l = case c of
-        InstructionChunk i _ -> instructionSize i
+        InstructionChunk i -> instructionSize i
         BuilderChunk i _ -> fromIntegral i
 
-emit' :: (KnownArch a, CodeMonad a m) => Instruction a -> Maybe (LabelRelocation a) -> m TextAddress
-emit' i lr = emitChunk $ InstructionChunk i lr
-
 emit :: (KnownArch a, CodeMonad a m) => Instruction a -> m ()
-emit i = void $ emit' i Nothing
+emit i = void $ emitChunk $ InstructionChunk i
 
-emitReloc :: (KnownArch a, CodeMonad a m) => Instruction a -> Label -> RelocationType a -> m ()
+emitReloc :: (KnownArch a, CodeMonad a m) => Instruction a -> Symbol -> RelocationType a -> m ()
 emitReloc i l r = do
     o <- offset
-    void $ emit' i (Just $ LabelRelocation l r o)
+    emit i
+    addRelocation $ RelocationTableItem l r o
 
 -- IMPORTANT: this can leave text array in unaligned state so
 -- this should not be exported
@@ -181,16 +215,15 @@ align' a | a < 0               = $chainedError "negative align"
 ltorg' :: (KnownArch a, CodeMonad a m) => m ()
 ltorg' = do
     let
-        f LabelTableUnallocatedEntry { .. } = do
-            align' ltueAlign
-            (ltueIndex, ) <$> emitBuilder ltueLength ltueData
-    lt <- gets labelTableUnallocated
-    lt' <- mapM f lt
+        f SymbolTableItemTxtUnallocated { .. } = do
+            align' stiTxtUAlign
+            SymbolTableItemTxt stiTxtUN Nothing <$> emitBuilder stiTxtULength stiTxtUData
+        f x = return x
+    symbols' <- gets symbolsReversed >>= mapM f
     let
         fm CodeState { .. } =
             CodeState
-                { labelTableUnallocated = []
-                , labelTable = lt' ++ labelTable
+                { symbolsReversed = symbols'
                 , ..
                 }
     modify fm
@@ -202,64 +235,96 @@ align :: forall a m . (KnownArch a, CodeMonad a m) => Int -> m ()
 align a | a < (ltorgAlign (Proxy @a)) = $chainedError "align is too small"
         | otherwise                   = align' a
 
+allocateBSS :: MonadState (CodeState a) m => Int -> Int -> m Symbol
+allocateBSS stiBSSUAlign stiBSSULength = state f where
+    f CodeState {..} =
+        ( Symbol symbolsNext
+        , CodeState
+            { symbolsNext = 1 + symbolsNext
+                , symbolsReversed = SymbolTableItemBSSUnallocated
+                     { stiBSSUN = symbolsNext
+                     , ..
+                     } : symbolsReversed
+                , ..
+                }
+        )
+
 --------------------------------------------------------------------------------
 -- pool
 
-emitPool' :: MonadState (CodeState a) m => TextAddress -> m Label
-emitPool' a = state f where
+emitPool' :: MonadState (CodeState a) m => TextAddress -> m Symbol
+emitPool' stiTxtOffset = state f where
     f CodeState {..} =
-        ( Label labelTableNext
-        , CodeState { labelTableNext = labelTableNext + 1
-                    , labelTable = (labelTableNext, a) : labelTable
-                    , ..
-                    }
+        ( Symbol symbolsNext
+        , CodeState
+            { symbolsNext = symbolsNext + 1
+            , symbolsReversed = SymbolTableItemTxt
+                { stiTxtN = symbolsNext
+                , stiTxtName = Nothing
+                , ..
+                } : symbolsReversed
+            , ..
+            }
         )
 
-emitPool :: MonadState (CodeState a) m => Int -> Int -> Builder -> m Label
-emitPool ltueAlign ltueLength ltueData = state f where
-    f CodeState {..} = let ltueIndex = labelTableNext in
-        ( Label labelTableNext
-        , CodeState { labelTableNext = labelTableNext + 1
-                    , labelTableUnallocated = (LabelTableUnallocatedEntry { .. }) : labelTableUnallocated
-                    , ..
-                    }
+emitPool :: MonadState (CodeState a) m => Int -> Int -> Builder -> m Symbol
+emitPool stiTxtUAlign stiTxtULength stiTxtUData = state f where
+    f CodeState {..} =
+        ( Symbol symbolsNext
+        , CodeState
+            { symbolsNext = symbolsNext + 1
+            , symbolsReversed = SymbolTableItemTxtUnallocated
+                { stiTxtUN = symbolsNext
+                , ..
+                } : symbolsReversed
+            , ..
+            }
         )
 
-label :: MonadState (CodeState a) m => m Label
+label :: MonadState (CodeState a) m => m Symbol
 label = offset >>= emitPool'
 
 --------------------------------------------------------------------------------
 -- asm directives
 
-ascii, asciiz:: MonadState (CodeState a) m => String -> m Label
+ascii, asciiz:: MonadState (CodeState a) m => String -> m Symbol
 ascii s = emitPool 1 l bu
     where
         bu = stringUtf8 s
         l = fromIntegral $ BSL.length $ toLazyByteString bu
 asciiz s = ascii (s <> "\0")
 
-word8, byte :: MonadState (CodeState a) m => Word8 -> m Label
+word8, byte :: MonadState (CodeState a) m => Word8 -> m Symbol
 word8 w = emitPool 1 1 $ BSB.word8 w
 byte = word8
 
-word16, short :: MonadState (CodeState a) m => Word16 -> m Label
+word16, short :: MonadState (CodeState a) m => Word16 -> m Symbol
 word16 w = emitPool 2 2 $ BSB.word16LE w
 short = word16
 
-word32, word :: MonadState (CodeState a) m => Word32 -> m Label
+word32, word :: MonadState (CodeState a) m => Word32 -> m Symbol
 word32 w = emitPool 4 4 $ BSB.word32LE w
 word = word32
 
-word64, long :: MonadState (CodeState a) m => Word64 -> m Label
+word64, long :: MonadState (CodeState a) m => Word64 -> m Symbol
 word64 w = emitPool 8 8 $ BSB.word64LE w
 long = word64
 
-exportSymbol :: MonadState (CodeState a) m => String -> Label -> m ()
-exportSymbol s r = modify f where
+-- FIXME: rename it
+exportSymbol :: MonadState (CodeState a) m => String -> m Symbol
+exportSymbol name = state f where
     f CodeState {..} =
-        CodeState { symbolsRefersed = (s, r) : symbolsRefersed
-                  , ..
-                  }
+        ( Symbol symbolsNext
+        , CodeState
+            { symbolsNext = 1 + symbolsNext
+                , symbolsReversed = SymbolTableItemTxt
+                    { stiTxtN = symbolsNext
+                    , stiTxtOffset = textOffset
+                    , stiTxtName = Just name
+                    } : symbolsReversed
+                , ..
+                }
+        )
 
 --------------------------------------------------------------------------------
 -- assembler
@@ -306,6 +371,14 @@ addNewSection e = modify f
                 , ..
                 }
 
+splitMapReverseM :: MonadThrow m => (a -> m (Maybe b)) -> [a] -> m ([a], [b])
+splitMapReverseM f l = foldlM f' ([], []) l
+    where
+        f' (a, b) x = f'' <$> f x
+            where
+                f'' Nothing = (x : a, b)
+                f'' (Just b') = (a, b' : b)
+
 assemble :: forall a m . (MonadCatch m, KnownArch a) => StateT (CodeState a) m () -> m Elf
 assemble m = do
 
@@ -317,12 +390,12 @@ assemble m = do
         -- labels
         ---------------------------------------------------------------------
 
-        let
-            labelArray :: UArray Int Int64
-            labelArray = array (0, P.length labelTable - 1) (P.map (bimap id getTextAddress) labelTable)
+        -- let
+        --     labelArray :: UArray Int Int64
+        --     labelArray = array (0, P.length labelTable - 1) (P.map (bimap id getTextAddress) labelTable)
 
-            labelToTextAddress :: Label -> TextAddress
-            labelToTextAddress (Label i) = TextAddress $ labelArray ! i
+        --     labelToTextAddress :: Ref -> TextAddress
+        --     labelToTextAddress (Ref i) = TextAddress $ labelArray ! i
 
         ---------------------------------------------------------------------
         -- txt
@@ -330,16 +403,29 @@ assemble m = do
 
         let
             text = P.reverse textReversed
+            symbols = P.reverse symbolsReversed
 
-            fTxt' :: MonadThrow m' => Instruction a -> Maybe (LabelRelocation a) -> m' (Instruction a)
-            fTxt' i Nothing                         = return i
-            fTxt' i (Just (LabelRelocation { .. })) = relocate lrRelocation i lrAddress (labelToTextAddress lrLabel) 0
+            symbolTab :: Array Int SymbolTableItem
+            symbolTab = listArray (0, P.length symbols - 1) symbols
 
-            fTxt :: MonadThrow m' => TextChunk a -> m' Builder
-            fTxt (InstructionChunk i rl) = serializeInstruction <$> fTxt' i rl
-            fTxt (BuilderChunk _ bu) = return bu
+            getSymbolTableItem :: Symbol -> SymbolTableItem
+            getSymbolTableItem (Symbol i) = symbolTab ! i
 
-        txt <- toLazyByteString <$> mconcat <$> mapM fTxt text
+            fTxtReloc :: MonadThrow m' => RelocationTableItem a -> m' (Maybe RelocationMonad)
+            fTxtReloc RelocationTableItem { .. } =
+                case getSymbolTableItem lrSymbol of
+                    SymbolTableItemTxt { .. } -> Just <$> mkRelocation @a lrRelocation lrAddress stiTxtOffset 0
+                    _ -> return Nothing
+
+        (_reloc, relocTxt) <- splitMapReverseM fTxtReloc relocations
+
+        let
+            fTxt :: TextChunk a -> Builder
+            fTxt (InstructionChunk i) = serializeInstruction @a i
+            fTxt (BuilderChunk _ bu) = bu
+
+            txt = relocate (toLazyByteString $ mconcat $ P.map fTxt text) (fold relocTxt)
+
         textSecN <- getNextSectionN
         addNewSection
             ElfSection
@@ -375,25 +461,58 @@ assemble m = do
                 }
 
         ---------------------------------------------------------------------
+        -- bss
+        ---------------------------------------------------------------------
+
+        -- when (0 /= P.length bss) $ do
+        --     bssSecN <- getNextSectionN
+        --     addNewSection
+        --         ElfSection
+        --             { esName      = ".bss"
+        --             , esType      = SHT_NOBITS
+        --             , esFlags     = SHF_WRITE .|. SHF_ALLOC
+        --             , esAddr      = 0
+        --             , esAddrAlign = 1
+        --             , esEntSize   = 0
+        --             , esN         = bssSecN
+        --             , esLink      = 0
+        --             , esInfo      = 0
+        --             , esData      = ElfSectionData empty
+        --             }
+
+        ---------------------------------------------------------------------
         -- symbols
         ---------------------------------------------------------------------
 
         let
-            symbols = P.reverse symbolsRefersed
-
-            fSymbol :: (String, Label) -> ElfSymbolXX 'ELFCLASS64
-            fSymbol (s, l) =
+            fSymbol :: SymbolTableItem -> ElfSymbolXX 'ELFCLASS64
+            fSymbol SymbolTableItemTxtUnallocated {} = error "internal error: SymbolTableItemTxtUnallocated"
+            fSymbol SymbolTableItemTxt { stiTxtName = Nothing, .. } =
                 let
-                    steName  = s
-                    steBind  = STB_Global
+                    steName  = "$" ++ show stiTxtN ++ "@" ++ (show $ getTextAddress stiTxtOffset)
+                    steBind  = STB_Local
                     steType  = STT_NoType
                     steShNdx = textSecN
-                    steValue = fromIntegral $ getTextAddress $ labelToTextAddress l
+                    steValue = fromIntegral stiTxtOffset
                     steSize  = 0
                 in
                     ElfSymbolXX{..}
+            fSymbol SymbolTableItemTxt { stiTxtName = Just name, .. } =
+                let
+                    steName  = name
+                    steBind  = STB_Global
+                    steType  = STT_NoType
+                    steShNdx = textSecN
+                    steValue = fromIntegral stiTxtOffset
+                    steSize  = 0
+                in
+                    ElfSymbolXX{..}
+            fSymbol SymbolTableItemBSSUnallocated {} = error "internal error: SymbolTableItemBSSUnallocated"
+            fSymbol SymbolTableItemBSS {} = undefined
 
-            symbolTable = fSymbol <$> symbols
+            symbolTable = sortOn steBind $ fSymbol <$> symbols
+            isLocal s = steBind s == STB_Local
+            numLocal = fromIntegral $ P.length $ P.takeWhile isLocal symbolTable
 
         (symbolTableData, stringTableData) <- serializeSymbolTable ELFDATA2LSB (zeroIndexStringItem : symbolTable)
 
@@ -410,7 +529,7 @@ assemble m = do
                 , esEntSize   = symbolTableEntrySize ELFCLASS64
                 , esN         = symtabSecN
                 , esLink      = fromIntegral strtabSecN
-                , esInfo      = 1
+                , esInfo      = numLocal + 1
                 , esData      = ElfSectionData symbolTableData
                 }
 

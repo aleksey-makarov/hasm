@@ -28,7 +28,7 @@ symbol table section 4 ".symtab" {
     Addr:      0x0000000000000000
     AddrAlign: 0x0000000000000008
     EntSize:   0x0000000000000018
-    Info:      0x00000001
+    Info:      0x00000004
     Link:      0x00000003
     Data:      
         symbol "" {
@@ -36,6 +36,27 @@ symbol table section 4 ".symtab" {
             Type:  STT_NoType
             ShNdx: SHN_Undef
             Value: 0x0000000000000000
+            Size:  0x0000000000000000
+        }
+        symbol "$1@48" {
+            Bind:  STB_Local
+            Type:  STT_NoType
+            ShNdx: SHN_EXT 1
+            Value: 0x0000000000000030
+            Size:  0x0000000000000000
+        }
+        symbol "$2@44" {
+            Bind:  STB_Local
+            Type:  STT_NoType
+            ShNdx: SHN_EXT 1
+            Value: 0x000000000000002c
+            Size:  0x0000000000000000
+        }
+        symbol "$3@24" {
+            Bind:  STB_Local
+            Type:  STT_NoType
+            ShNdx: SHN_EXT 1
+            Value: 0x0000000000000018
             Size:  0x0000000000000000
         }
         symbol "_start" {
@@ -54,6 +75,7 @@ section 3 ".strtab" {
     EntSize:   0x0000000000000000
     Info:      0x00000000
     Link:      0x00000000
-    Data:      00 5f 73 74 61 72 74 00                         # ._start.
+    Data:      00 5f 73 74 61 72 74 00 24 33 40 32 34 00 24 32 # ._start.$3@24.$2
+               40 34 34 00 24 31 40 34 38 00                   # @44.$1@48.
 }
 section table

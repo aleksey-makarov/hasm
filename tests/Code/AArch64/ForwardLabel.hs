@@ -6,6 +6,7 @@ module Code.AArch64.ForwardLabel (forwardLabel) where
 
 import Prelude as P
 
+import Control.Monad
 import Control.Monad.Fix
 import Data.Word
 
@@ -26,7 +27,7 @@ sysExit = 93
 forwardLabel :: (CodeMonad AArch64 m, MonadFix m) => m ()
 forwardLabel = mdo
 
-    label >>= exportSymbol "_start"
+    void $ exportSymbol "_start"
 
     lOk <- ascii ok
     lBad <- ascii bad

@@ -4,10 +4,12 @@ module Asm.Data where
 
 import Data.Bits
 import Data.Int
+import Data.Ix
 import Data.Word
 
+-- FIXME: rename to SectionOffset?
 newtype TextAddress  = TextAddress  { getTextAddress  :: Int64 }
-    deriving (Eq, Show, Ord, Num, Enum, Real, Integral, Bits, FiniteBits)
+    deriving (Eq, Show, Ord, Num, Enum, Real, Integral, Bits, FiniteBits, Ix)
 
 mask :: (Num b, Bits b, Ord b) => Int -> b
 mask n = (1 `shift` n) - 1

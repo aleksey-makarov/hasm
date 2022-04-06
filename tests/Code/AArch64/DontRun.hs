@@ -5,6 +5,7 @@
 module Code.AArch64.DontRun (dontRun) where
 
 import Prelude as P
+import Control.Monad
 
 import Asm.Asm
 import Asm.AArch64
@@ -12,7 +13,9 @@ import Asm.AArch64
 dontRun :: CodeMonad AArch64 m => m ()
 dontRun = do
 
-    label >>= exportSymbol "_start"
+    void $ exportSymbol "_start"
+
+    -- _bss1 <- allocateBSS 1 20
 
     _a <- ascii "ascii"
     _az <- asciiz "asciiz"
