@@ -13,7 +13,7 @@ import Asm.AArch64
 dontRun :: CodeMonad AArch64 m => m ()
 dontRun = do
 
-    void $ exportSymbol "_start"
+    void $ labelExtern "_start"
 
     -- _bss1 <- allocateBSS 1 20
 

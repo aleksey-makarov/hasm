@@ -30,8 +30,8 @@ module Asm.Asm
 
     -- * Assembler directives
     , label
+    , labelExtern
     , ltorg
-    , exportSymbol
     , offset
     , emit
     , emitReloc
@@ -79,8 +79,8 @@ class KnownArch a where
     mkRelocation ::
             MonadThrow m =>
         RelocationType a ->
-             TextAddress -> -- p (he address of the place being relocated)
-             TextAddress -> -- s (is the address of the symbol)
+           SectionOffset -> -- p (he address of the place being relocated)
+           SectionOffset -> -- s (is the address of the symbol)
                    Int64 -> -- a (the addend for the relocation)
                              m RelocationMonad
 
@@ -112,13 +112,8 @@ data SymbolTableItem
     | SymbolTableItemTxt
         { stiTxtN      :: Int
         , stiTxtName   :: Maybe String
-        , stiTxtOffset :: TextAddress
+        , stiTxtOffset :: SectionOffset
         }
-    -- | SymbolTableItemTxtExternal
-    --     { stiTxtEN      :: Int
-    --     , stiTxtEName   :: String
-    --     , stiTxtEOffset :: TextAddress
-    --     }
     | SymbolTableItemBSSUnallocated
         { stiBSSUN      :: Int
         , stiBSSUAlign  :: Int
@@ -133,12 +128,12 @@ data RelocationTableItem a
     = RelocationTableItem
         { lrSymbol     :: Symbol
         , lrRelocation :: RelocationType a
-        , lrAddress    :: TextAddress
+        , lrAddress    :: SectionOffset
         }
 
 data CodeState a
     = CodeState
-        { textOffset            :: TextAddress   -- Should always be aligned by instructionSize
+        { textOffset            :: SectionOffset   -- Should always be aligned by instructionSize
         , textReversed          :: [TextChunk a]
 
         , symbolsNext           :: Int
@@ -150,7 +145,7 @@ data CodeState a
 codeStateInit :: CodeState a
 codeStateInit = CodeState 0 [] 0 [] []
 
-offset :: MonadState (CodeState a) m => m TextAddress
+offset :: MonadState (CodeState a) m => m SectionOffset
 offset = gets textOffset
 
 --------------------------------------------------------------------------------
@@ -163,7 +158,7 @@ addRelocation c = modify f where
                   , ..
                   }
 
-emitChunk :: (KnownArch a, CodeMonad a m) => TextChunk a -> m TextAddress
+emitChunk :: (KnownArch a, CodeMonad a m) => TextChunk a -> m SectionOffset
 emitChunk c = state f where
     f CodeState {..} =
         ( textOffset
@@ -187,7 +182,7 @@ emitReloc i l r = do
 
 -- IMPORTANT: this can leave text array in unaligned state so
 -- this should not be exported
-emitBuilder :: (KnownArch a, CodeMonad a m) => Int -> Builder -> m TextAddress
+emitBuilder :: (KnownArch a, CodeMonad a m) => Int -> Builder -> m SectionOffset
 emitBuilder l bu | l < 0     = error "internal error: chunk length < 0"
                  | l == 0    = offset
                  | otherwise = emitChunk $ BuilderChunk l bu
@@ -252,15 +247,14 @@ allocateBSS stiBSSUAlign stiBSSULength = state f where
 --------------------------------------------------------------------------------
 -- pool
 
-emitPool' :: MonadState (CodeState a) m => TextAddress -> m Symbol
-emitPool' stiTxtOffset = state f where
+emitPool' :: MonadState (CodeState a) m => Maybe String -> SectionOffset -> m Symbol
+emitPool' stiTxtName stiTxtOffset = state f where
     f CodeState {..} =
         ( Symbol symbolsNext
         , CodeState
             { symbolsNext = symbolsNext + 1
             , symbolsReversed = SymbolTableItemTxt
                 { stiTxtN = symbolsNext
-                , stiTxtName = Nothing
                 , ..
                 } : symbolsReversed
             , ..
@@ -282,7 +276,10 @@ emitPool stiTxtUAlign stiTxtULength stiTxtUData = state f where
         )
 
 label :: MonadState (CodeState a) m => m Symbol
-label = offset >>= emitPool'
+label = offset >>= emitPool' Nothing
+
+labelExtern :: MonadState (CodeState a) m => String -> m Symbol
+labelExtern name = offset >>= emitPool' (Just name)
 
 --------------------------------------------------------------------------------
 -- asm directives
@@ -309,22 +306,6 @@ word = word32
 word64, long :: MonadState (CodeState a) m => Word64 -> m Symbol
 word64 w = emitPool 8 8 $ BSB.word64LE w
 long = word64
-
--- FIXME: rename it
-exportSymbol :: MonadState (CodeState a) m => String -> m Symbol
-exportSymbol name = state f where
-    f CodeState {..} =
-        ( Symbol symbolsNext
-        , CodeState
-            { symbolsNext = 1 + symbolsNext
-                , symbolsReversed = SymbolTableItemTxt
-                    { stiTxtN = symbolsNext
-                    , stiTxtOffset = textOffset
-                    , stiTxtName = Just name
-                    } : symbolsReversed
-                , ..
-                }
-        )
 
 --------------------------------------------------------------------------------
 -- assembler
@@ -392,10 +373,10 @@ assemble m = do
 
         -- let
         --     labelArray :: UArray Int Int64
-        --     labelArray = array (0, P.length labelTable - 1) (P.map (bimap id getTextAddress) labelTable)
+        --     labelArray = array (0, P.length labelTable - 1) (P.map (bimap id getSectionOffset) labelTable)
 
-        --     labelToTextAddress :: Ref -> TextAddress
-        --     labelToTextAddress (Ref i) = TextAddress $ labelArray ! i
+        --     labelToSectionOffset :: Ref -> SectionOffset
+        --     labelToSectionOffset (Ref i) = SectionOffset $ labelArray ! i
 
         ---------------------------------------------------------------------
         -- txt
@@ -489,7 +470,7 @@ assemble m = do
             fSymbol SymbolTableItemTxtUnallocated {} = error "internal error: SymbolTableItemTxtUnallocated"
             fSymbol SymbolTableItemTxt { stiTxtName = Nothing, .. } =
                 let
-                    steName  = "$" ++ show stiTxtN ++ "@" ++ (show $ getTextAddress stiTxtOffset)
+                    steName  = "$" ++ show stiTxtN ++ "@" ++ (show $ getSectionOffset stiTxtOffset)
                     steBind  = STB_Local
                     steType  = STT_NoType
                     steShNdx = textSecN

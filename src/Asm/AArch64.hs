@@ -110,8 +110,8 @@ instance ArgADR Word21 where
 instance ArgADR Symbol where
     adr r l = instrReloc (adr_ r 0) l R_AARCH64_ADR_PREL_LO21
 
--- offsetToImm21 :: MonadThrow m => TextAddress -> m Word21
--- offsetToImm21 (TextAddress o)
+-- offsetToImm21 :: MonadThrow m => SectionOffset -> m Word21
+-- offsetToImm21 (SectionOffset o)
 --   | not $ isBitN 21 o = $chainedError "offset is too big"
 --   | otherwise         = return $ fromIntegral (o .&. mask 21)
 
@@ -128,8 +128,8 @@ instance ArgB Word26 where
 instance ArgB Symbol where
     b l = instrReloc (b_ 0) l R_AARCH64_JUMP26
 
--- offsetToImm26 :: MonadThrow m => TextAddress -> m Word26
--- offsetToImm26 (TextAddress o)
+-- offsetToImm26 :: MonadThrow m => SectionOffset -> m Word26
+-- offsetToImm26 (SectionOffset o)
 --   | o .&. 0x3 /= 0    = $chainedError $ "offset is not aligned: " ++ show o
 --   | not $ isBitN 28 o = $chainedError "offset is too big"
 --   | otherwise         = return $ fromIntegral ((o `shiftR` 2) .&. mask 26)
@@ -178,8 +178,8 @@ ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
     where
         imm9' = fixWord 9 imm9 -- FIXME: Word9 should keep verified integer
 
--- offsetToImm9 :: MonadThrow m => TextAddress -> m Word9
--- offsetToImm9 (TextAddress o)
+-- offsetToImm9 :: MonadThrow m => SectionOffset -> m Word9
+-- offsetToImm9 (SectionOffset o)
 --   | o .&. 0x3 /= 0    = $chainedError $ "offset is not aligned: " ++ show o
 --   | not $ isBitN 11 o = $chainedError "offset is too big"
 --   | otherwise         = return $ fromIntegral ((o `shiftR` 2) .&. mask 9)
@@ -192,18 +192,18 @@ svc imm = instr $ 0xd4000001 .|. (fromIntegral imm `shift` 5)
 mkRelocation' ::
                  MonadThrow m =>
     ElfRelocationType_AARCH64 ->
-                  TextAddress -> -- p (he address of the place being relocated)
-                  TextAddress -> -- s (is the address of the symbol)
+                SectionOffset -> -- p (he address of the place being relocated)
+                SectionOffset -> -- s (is the address of the symbol)
                         Int64 -> -- a (the addend for the relocation)
                                  m RelocationMonad
-mkRelocation' R_AARCH64_JUMP26 p@(TextAddress p') (TextAddress s) a = do
+mkRelocation' R_AARCH64_JUMP26 p@(SectionOffset p') (SectionOffset s) a = do
     let
         x = (s + a - p') `shiftR` 2
     imm <- $maybeAddContext "imm does not fit" $ fitN 26 x
     let
         f w = (w .&. 0xfc000000) .|. imm
     return $ modifyWord32LE p f
-mkRelocation' R_AARCH64_ADR_PREL_LO21 p@(TextAddress p') (TextAddress s) a = do
+mkRelocation' R_AARCH64_ADR_PREL_LO21 p@(SectionOffset p') (SectionOffset s) a = do
     let
         x = (s + a - p')
     imm21 <- $maybeAddContext "imm does not fit" $ fitN 21 x

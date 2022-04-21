@@ -27,7 +27,7 @@ sysExit = 93
 forwardLabel :: (CodeMonad AArch64 m, MonadFix m) => m ()
 forwardLabel = mdo
 
-    void $ exportSymbol "_start"
+    void $ labelExtern "_start"
 
     lOk <- ascii ok
     lBad <- ascii bad
