@@ -57,7 +57,7 @@ instance KnownArch AArch64 where
     instructionSize = const 4
     ltorgAlign = const 4
     serializeInstruction = word32LE . getInstruction
-    mkRelocation = mkRelocation'
+    mkRelocation = mkRelocationAArch64
 
 type instance RelocationType AArch64 = ElfRelocationType_AARCH64
 
@@ -189,21 +189,21 @@ ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
 svc ::CodeMonad AArch64 m => Word16 -> m ()
 svc imm = instr $ 0xd4000001 .|. (fromIntegral imm `shift` 5)
 
-mkRelocation' ::
+mkRelocationAArch64 ::
                  MonadThrow m =>
     ElfRelocationType_AARCH64 ->
                 SectionOffset -> -- p (he address of the place being relocated)
                 SectionOffset -> -- s (is the address of the symbol)
                         Int64 -> -- a (the addend for the relocation)
-                                 m RelocationMonad
-mkRelocation' R_AARCH64_JUMP26 p@(SectionOffset p') (SectionOffset s) a = do
+                                 m (RelocationMonad ())
+mkRelocationAArch64 R_AARCH64_JUMP26 p@(SectionOffset p') (SectionOffset s) a = do
     let
         x = (s + a - p') `shiftR` 2
     imm <- $maybeAddContext "imm does not fit" $ fitN 26 x
     let
         f w = (w .&. 0xfc000000) .|. imm
     return $ modifyWord32LE p f
-mkRelocation' R_AARCH64_ADR_PREL_LO21 p@(SectionOffset p') (SectionOffset s) a = do
+mkRelocationAArch64 R_AARCH64_ADR_PREL_LO21 p@(SectionOffset p') (SectionOffset s) a = do
     let
         x = (s + a - p')
     imm21 <- $maybeAddContext "imm does not fit" $ fitN 21 x
@@ -213,4 +213,4 @@ mkRelocation' R_AARCH64_ADR_PREL_LO21 p@(SectionOffset p') (SectionOffset s) a =
         imm   = (immhi `shift` 5) .|. (immlo `shift` 29)
         f w = (w .&. 0x9f00001f) .|. imm
     return $ modifyWord32LE p f
-mkRelocation' rl _ _ _ = $chainedError ("relocation is not implemented: " <> show rl)
+mkRelocationAArch64 rl _ _ _ = $chainedError ("relocation is not implemented: " <> show rl)

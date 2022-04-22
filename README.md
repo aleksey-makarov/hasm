@@ -5,6 +5,7 @@
 ## Plans
 
 - AArch64
+- x86_64 (just proof of concept level of support)
 - AArch32
 - RISC-V both 32 and 64 bit
 

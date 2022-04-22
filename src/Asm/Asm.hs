@@ -82,7 +82,7 @@ class KnownArch a where
            SectionOffset -> -- p (he address of the place being relocated)
            SectionOffset -> -- s (is the address of the symbol)
                    Int64 -> -- a (the addend for the relocation)
-                             m RelocationMonad
+                             m (RelocationMonad ())
 
 type family RelocationType a = t | t -> a
 
@@ -392,7 +392,7 @@ assemble m = do
             getSymbolTableItem :: Symbol -> SymbolTableItem
             getSymbolTableItem (Symbol i) = symbolTab ! i
 
-            fTxtReloc :: MonadThrow m' => RelocationTableItem a -> m' (Maybe RelocationMonad)
+            fTxtReloc :: MonadThrow m' => RelocationTableItem a -> m' (Maybe (RelocationMonad ()))
             fTxtReloc RelocationTableItem { .. } =
                 case getSymbolTableItem lrSymbol of
                     SymbolTableItemTxt { .. } -> Just <$> mkRelocation @a lrRelocation lrAddress stiTxtOffset 0
