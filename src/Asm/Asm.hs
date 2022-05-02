@@ -36,7 +36,9 @@ module Asm.Asm
     , emit
     , emitReloc
     , align
-    , allocateBSS
+    , Access (..)
+    , Data (..)
+    , allocate
 
     , ascii, asciiz
     , byte, short, word, long
@@ -114,14 +116,11 @@ data SymbolTableItem
         , stiTxtName   :: Maybe String
         , stiTxtOffset :: SectionOffset
         }
-    | SymbolTableItemBSSUnallocated
-        { stiBSSUN      :: Int
-        , stiBSSUAlign  :: Int
-        , stiBSSULength :: Int
-        }
-    | SymbolTableItemBSS
-        { -- stiBSSN      :: Int
-        -- , stiBSSOffset :: Int64
+    | SymbolTableItemDataUnallocated
+        { stiDataN         :: Int
+        , stiDataAlignment :: Int
+        , stiDataAccess    :: Access
+        , stiDataData      :: Data
         }
 
 data RelocationTableItem a
@@ -230,14 +229,19 @@ align :: forall a m . (KnownArch a, CodeMonad a m) => Int -> m ()
 align a | a < (ltorgAlign (Proxy @a)) = $chainedError "align is too small"
         | otherwise                   = align' a
 
-allocateBSS :: MonadState (CodeState a) m => Int -> Int -> m Symbol
-allocateBSS stiBSSUAlign stiBSSULength = state f where
+data Access = RO | RW
+data Data
+    = Uninitialized Int
+    | Initialized Builder
+
+allocate :: MonadState (CodeState a) m => Int -> Access -> Data -> m Symbol
+allocate stiDataAlignment stiDataAccess stiDataData = state f where
     f CodeState {..} =
         ( Symbol symbolsNext
         , CodeState
             { symbolsNext = 1 + symbolsNext
-                , symbolsReversed = SymbolTableItemBSSUnallocated
-                     { stiBSSUN = symbolsNext
+                , symbolsReversed = SymbolTableItemDataUnallocated
+                     { stiDataN = symbolsNext
                      , ..
                      } : symbolsReversed
                 , ..
@@ -488,8 +492,7 @@ assemble m = do
                     steSize  = 0
                 in
                     ElfSymbolXX{..}
-            fSymbol SymbolTableItemBSSUnallocated {} = error "internal error: SymbolTableItemBSSUnallocated"
-            fSymbol SymbolTableItemBSS {} = undefined
+            fSymbol SymbolTableItemDataUnallocated {} = error "internal error: SymbolTableItemDataUnallocated"
 
             symbolTable = sortOn steBind $ fSymbol <$> symbols
             isLocal s = steBind s == STB_Local
