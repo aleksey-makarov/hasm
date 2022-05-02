@@ -37,7 +37,7 @@ symbol table section 4 ".symtab" {
             Value: 0x0000000000000000
             Size:  0x0000000000000000
         }
-        symbol "$1@32" {
+        symbol "$32" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
@@ -60,6 +60,6 @@ section 3 ".strtab" {
     EntSize:   0x0000000000000000
     Info:      0x00000000
     Link:      0x00000000
-    Data:      00 5f 73 74 61 72 74 00 24 31 40 33 32 00       # ._start.$1@32.
+    Data:      00 5f 73 74 61 72 74 00 24 33 32 00             # ._start.$32.
 }
 section table

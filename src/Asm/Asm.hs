@@ -38,6 +38,7 @@ module Asm.Asm
     , align
     , Access (..)
     , Data (..)
+    , Visibility (..)
     , allocate
 
     , ascii, asciiz
@@ -64,7 +65,6 @@ import Data.Elf.Headers
 import Data.Foldable
 import Data.Int
 import Data.Kind
-import Data.List (sortOn)
 import Data.Singletons.Sigma
 import Data.Singletons.TH
 import Data.Word
@@ -89,7 +89,9 @@ class KnownArch a where
 type family RelocationType a = t | t -> a
 
 type CodeMonad a m = (MonadThrow m, MonadState (CodeState a) m)
-data Symbol = Symbol Int
+data Symbol
+    = SymbolLocal Int
+    | SymbolGlobal Int
 
 --------------------------------------------------------------------------------
 -- state
@@ -106,19 +108,16 @@ data TextChunk a
 
 data SymbolTableItem
     = SymbolTableItemTxtUnallocated
-        { stiTxtUN      :: Int
-        , stiTxtUAlign  :: Int
+        { stiTxtUAlign  :: Int
         , stiTxtULength :: Int
         , stiTxtUData   :: Builder
         }
     | SymbolTableItemTxt
-        { stiTxtN      :: Int
-        , stiTxtName   :: Maybe String
+        { stiTxtName   :: Maybe String
         , stiTxtOffset :: SectionOffset
         }
     | SymbolTableItemDataUnallocated
-        { stiDataN         :: Int
-        , stiDataAlignment :: Int
+        { stiDataAlignment :: Int
         , stiDataAccess    :: Access
         , stiDataData      :: Data
         }
@@ -135,6 +134,8 @@ data CodeState a
         { textOffset            :: SectionOffset   -- Should always be aligned by instructionSize
         , textReversed          :: [TextChunk a]
 
+        , symbolsLocalNext      :: Int
+        , symbolsLocalReversed  :: [SymbolTableItem]
         , symbolsNext           :: Int
         , symbolsReversed       :: [SymbolTableItem]
 
@@ -142,7 +143,7 @@ data CodeState a
         }
 
 codeStateInit :: CodeState a
-codeStateInit = CodeState 0 [] 0 [] []
+codeStateInit = CodeState 0 [] 0 [] 0 [] []
 
 offset :: MonadState (CodeState a) m => m SectionOffset
 offset = gets textOffset
@@ -211,13 +212,15 @@ ltorg' = do
     let
         f SymbolTableItemTxtUnallocated { .. } = do
             align' stiTxtUAlign
-            SymbolTableItemTxt stiTxtUN Nothing <$> emitBuilder stiTxtULength stiTxtUData
+            SymbolTableItemTxt Nothing <$> emitBuilder stiTxtULength stiTxtUData
         f x = return x
-    symbols' <- gets symbolsReversed >>= mapM f
+    symbols'      <- mapM f =<< gets symbolsReversed
+    symbolsLocal' <- mapM f =<< gets symbolsLocalReversed
     let
         fm CodeState { .. } =
             CodeState
                 { symbolsReversed = symbols'
+                , symbolsLocalReversed = symbolsLocal'
                 , ..
                 }
     modify fm
@@ -229,55 +232,47 @@ align :: forall a m . (KnownArch a, CodeMonad a m) => Int -> m ()
 align a | a < (ltorgAlign (Proxy @a)) = $chainedError "align is too small"
         | otherwise                   = align' a
 
+data Visibility = Local | Global
 data Access = RO | RW
 data Data
     = Uninitialized Int
     | Initialized Builder
 
-allocate :: MonadState (CodeState a) m => Int -> Access -> Data -> m Symbol
-allocate stiDataAlignment stiDataAccess stiDataData = state f where
+addSymbol :: MonadState (CodeState a) m => Visibility -> SymbolTableItem -> m Symbol
+addSymbol v newSymbolItem = state f where
     f CodeState {..} =
-        ( Symbol symbolsNext
-        , CodeState
-            { symbolsNext = 1 + symbolsNext
-                , symbolsReversed = SymbolTableItemDataUnallocated
-                     { stiDataN = symbolsNext
-                     , ..
-                     } : symbolsReversed
-                , ..
-                }
-        )
+        case v of
+            Local ->
+                ( SymbolLocal symbolsLocalNext
+                , CodeState
+                    { symbolsLocalNext = 1 + symbolsLocalNext
+                    , symbolsLocalReversed = newSymbolItem : symbolsLocalReversed
+                    , ..
+                    }
+                )
+            Global ->
+                ( SymbolGlobal symbolsNext
+                , CodeState
+                    { symbolsNext = 1 + symbolsNext
+                    , symbolsReversed = newSymbolItem : symbolsReversed
+                    , ..
+                    }
+                )
+
+allocate :: MonadState (CodeState a) m => Int -> Visibility -> Access -> Data -> m Symbol
+allocate stiDataAlignment v stiDataAccess stiDataData =
+    addSymbol v $ SymbolTableItemDataUnallocated { .. }
 
 --------------------------------------------------------------------------------
 -- pool
 
 emitPool' :: MonadState (CodeState a) m => Maybe String -> SectionOffset -> m Symbol
-emitPool' stiTxtName stiTxtOffset = state f where
-    f CodeState {..} =
-        ( Symbol symbolsNext
-        , CodeState
-            { symbolsNext = symbolsNext + 1
-            , symbolsReversed = SymbolTableItemTxt
-                { stiTxtN = symbolsNext
-                , ..
-                } : symbolsReversed
-            , ..
-            }
-        )
+emitPool' stiTxtName stiTxtOffset =
+    addSymbol (maybe Local (const Global) stiTxtName) (SymbolTableItemTxt { .. })
 
 emitPool :: MonadState (CodeState a) m => Int -> Int -> Builder -> m Symbol
-emitPool stiTxtUAlign stiTxtULength stiTxtUData = state f where
-    f CodeState {..} =
-        ( Symbol symbolsNext
-        , CodeState
-            { symbolsNext = symbolsNext + 1
-            , symbolsReversed = SymbolTableItemTxtUnallocated
-                { stiTxtUN = symbolsNext
-                , ..
-                } : symbolsReversed
-            , ..
-            }
-        )
+emitPool stiTxtUAlign stiTxtULength stiTxtUData =
+    addSymbol Local $ SymbolTableItemTxtUnallocated { .. }
 
 label :: MonadState (CodeState a) m => m Symbol
 label = offset >>= emitPool' Nothing
@@ -388,13 +383,14 @@ assemble m = do
 
         let
             text = P.reverse textReversed
-            symbols = P.reverse symbolsReversed
+            symbols = P.reverse symbolsLocalReversed ++ P.reverse symbolsReversed
 
             symbolTab :: Array Int SymbolTableItem
             symbolTab = listArray (0, P.length symbols - 1) symbols
 
             getSymbolTableItem :: Symbol -> SymbolTableItem
-            getSymbolTableItem (Symbol i) = symbolTab ! i
+            getSymbolTableItem (SymbolLocal i) = symbolTab ! i
+            getSymbolTableItem (SymbolGlobal i) = symbolTab ! (i + symbolsLocalNext)
 
             fTxtReloc :: MonadThrow m' => RelocationTableItem a -> m' (Maybe (RelocationMonad ()))
             fTxtReloc RelocationTableItem { .. } =
@@ -471,10 +467,11 @@ assemble m = do
 
         let
             fSymbol :: SymbolTableItem -> ElfSymbolXX 'ELFCLASS64
+            -- This should have been allocated in ltorg'
             fSymbol SymbolTableItemTxtUnallocated {} = error "internal error: SymbolTableItemTxtUnallocated"
             fSymbol SymbolTableItemTxt { stiTxtName = Nothing, .. } =
                 let
-                    steName  = "$" ++ show stiTxtN ++ "@" ++ (show $ getSectionOffset stiTxtOffset)
+                    steName  = "$" ++ (show $ getSectionOffset stiTxtOffset)
                     steBind  = STB_Local
                     steType  = STT_NoType
                     steShNdx = textSecN
@@ -494,9 +491,8 @@ assemble m = do
                     ElfSymbolXX{..}
             fSymbol SymbolTableItemDataUnallocated {} = error "internal error: SymbolTableItemDataUnallocated"
 
-            symbolTable = sortOn steBind $ fSymbol <$> symbols
-            isLocal s = steBind s == STB_Local
-            numLocal = fromIntegral $ P.length $ P.takeWhile isLocal symbolTable
+            symbolTable = fSymbol <$> symbols
+            numLocal = fromIntegral symbolsLocalNext
 
         (symbolTableData, stringTableData) <- serializeSymbolTable ELFDATA2LSB (zeroIndexStringItem : symbolTable)
 

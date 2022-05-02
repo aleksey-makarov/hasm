@@ -39,70 +39,70 @@ symbol table section 4 ".symtab" {
             Value: 0x0000000000000000
             Size:  0x0000000000000000
         }
-        symbol "$1@20" {
+        symbol "$20" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000014
             Size:  0x0000000000000000
         }
-        symbol "$2@13" {
+        symbol "$13" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x000000000000000d
             Size:  0x0000000000000000
         }
-        symbol "$3@12" {
+        symbol "$12" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x000000000000000c
             Size:  0x0000000000000000
         }
-        symbol "$4@64" {
+        symbol "$64" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000040
             Size:  0x0000000000000000
         }
-        symbol "$5@56" {
+        symbol "$56" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000038
             Size:  0x0000000000000000
         }
-        symbol "$6@48" {
+        symbol "$48" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000030
             Size:  0x0000000000000000
         }
-        symbol "$7@44" {
+        symbol "$44" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x000000000000002c
             Size:  0x0000000000000000
         }
-        symbol "$8@42" {
+        symbol "$42" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x000000000000002a
             Size:  0x0000000000000000
         }
-        symbol "$9@40" {
+        symbol "$40" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000028
             Size:  0x0000000000000000
         }
-        symbol "$10@72" {
+        symbol "$72" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
@@ -125,10 +125,8 @@ section 3 ".strtab" {
     EntSize:   0x0000000000000000
     Info:      0x00000000
     Link:      0x00000000
-    Data:      00 5f 73 74 61 72 74 00 24 31 30 40 37 32 00 24 # ._start.$10@72.$
-               39 40 34 30 00 24 38 40 34 32 00 24 37 40 34 34 # 9@40.$8@42.$7@44
-               00 24 36 40 34 38 00 24 35 40 35 36 00 24 34 40 # .$6@48.$5@56.$4@
-               36 34 00 24 33 40 31 32 00 24 32 40 31 33 00 24 # 64.$3@12.$2@13.$
-               31 40 32 30 00                                  # 1@20.
+    Data:      00 5f 73 74 61 72 74 00 24 37 32 00 24 34 30 00 # ._start.$72.$40.
+               24 34 32 00 24 34 34 00 24 34 38 00 24 35 36 00 # $42.$44.$48.$56.
+               24 36 34 00 24 31 32 00 24 31 33 00 24 32 30 00 # $64.$12.$13.$20.
 }
 section table
