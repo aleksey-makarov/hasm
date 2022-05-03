@@ -316,20 +316,8 @@ data ElfCompositionState a
     = ElfCompositionState
         { ecsNextSectionN :: ElfSectionIndex
         , ecsElfReversed  :: [ElfXX a]
+        , ecsSymbols      :: Array Int SymbolTableItem
         }
-
-elfCompositionStateInit :: IsElfClass a => ElfCompositionState a
-elfCompositionStateInit = ElfCompositionState 1 [h]
-    where
-        h = ElfHeader
-            { ehData       = ELFDATA2LSB
-            , ehOSABI      = ELFOSABI_SYSV
-            , ehABIVersion = 0
-            , ehType       = ET_REL
-            , ehMachine    = EM_AARCH64
-            , ehEntry      = 0
-            , ehFlags      = 0
-            }
 
 getNextSectionN :: Monad m => StateT (ElfCompositionState a) m ElfSectionIndex
 getNextSectionN = state f
@@ -364,6 +352,23 @@ assemble m = do
 
     CodeState {..} <- execStateT (m >> ltorg') codeStateInit
 
+    let
+        elfCompositionStateInit :: IsElfClass elfClass => ElfCompositionState elfClass
+        elfCompositionStateInit = ElfCompositionState 1 [h] symbolsArray
+            where
+                h = ElfHeader
+                    { ehData       = ELFDATA2LSB
+                    , ehOSABI      = ELFOSABI_SYSV
+                    , ehABIVersion = 0
+                    , ehType       = ET_REL
+                    , ehMachine    = EM_AARCH64
+                    , ehEntry      = 0
+                    , ehFlags      = 0
+                    }
+                symbols = P.reverse symbolsLocalReversed ++ P.reverse symbolsReversed
+                symbolsArray = listArray (0, P.length symbols - 1) symbols
+
+    -- FIXME: @'ELFCLASS64 -- wrong
     ElfCompositionState { .. } <- flip execStateT (elfCompositionStateInit @'ELFCLASS64) $ do
 
         ---------------------------------------------------------------------
@@ -383,18 +388,19 @@ assemble m = do
 
         let
             text = P.reverse textReversed
-            symbols = P.reverse symbolsLocalReversed ++ P.reverse symbolsReversed
 
-            symbolTab :: Array Int SymbolTableItem
-            symbolTab = listArray (0, P.length symbols - 1) symbols
+            getSymbolTableItem :: MonadState (ElfCompositionState elfClass) m' => Symbol -> m' SymbolTableItem
+            getSymbolTableItem s = do
+                table <- gets ecsSymbols
+                return $ case s of
+                    SymbolLocal i  -> table ! i
+                    SymbolGlobal i -> table ! (i + symbolsLocalNext)
 
-            getSymbolTableItem :: Symbol -> SymbolTableItem
-            getSymbolTableItem (SymbolLocal i) = symbolTab ! i
-            getSymbolTableItem (SymbolGlobal i) = symbolTab ! (i + symbolsLocalNext)
-
-            fTxtReloc :: MonadThrow m' => RelocationTableItem a -> m' (Maybe (RelocationMonad ()))
-            fTxtReloc RelocationTableItem { .. } =
-                case getSymbolTableItem lrSymbol of
+            fTxtReloc :: (MonadThrow m', MonadState (ElfCompositionState elfClass) m') =>
+                                                                 RelocationTableItem a -> m' (Maybe (RelocationMonad ()))
+            fTxtReloc RelocationTableItem { .. } = do
+                s <- getSymbolTableItem lrSymbol
+                case s of
                     SymbolTableItemTxt { .. } -> Just <$> mkRelocation @a lrRelocation lrAddress stiTxtOffset 0
                     _ -> return Nothing
 
@@ -491,8 +497,9 @@ assemble m = do
                     ElfSymbolXX{..}
             fSymbol SymbolTableItemDataUnallocated {} = error "internal error: SymbolTableItemDataUnallocated"
 
-            symbolTable = fSymbol <$> symbols
             numLocal = fromIntegral symbolsLocalNext
+
+        symbolTable <- (fmap fSymbol . elems) <$> gets ecsSymbols
 
         (symbolTableData, stringTableData) <- serializeSymbolTable ELFDATA2LSB (zeroIndexStringItem : symbolTable)
 
