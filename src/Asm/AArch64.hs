@@ -39,6 +39,7 @@ import Control.Monad.Catch
 import Data.Bits
 import Data.ByteString.Builder
 import Data.Elf.Constants
+import Data.Elf.Headers
 import Data.Int
 import Data.Kind
 import Data.Singletons.TH
@@ -60,6 +61,7 @@ instance KnownArch AArch64 where
     mkRelocation = mkRelocationAArch64
 
 type instance RelocationType AArch64 = ElfRelocationType_AARCH64
+type instance ArchElfClass AArch64 = 'ELFCLASS64
 
 type Register :: RegisterWidth -> Type
 newtype Register c = R Word32

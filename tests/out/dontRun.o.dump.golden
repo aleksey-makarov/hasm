@@ -23,14 +23,24 @@ section 1 ".text" {
                a5 00 00 00 07 ef cd ab a5                      # .........
 }
 string table section 2 ".shstrtab"
-symbol table section 4 ".symtab" {
+section 3 ".bss" {
+    Type:      SHT_NOBITS
+    Flags:     [SHF_WRITE,SHF_ALLOC]
+    Addr:      0x0000000000000000
+    AddrAlign: 0x0000000000000001
+    EntSize:   0x0000000000000000
+    Info:      0x00000000
+    Link:      0x00000000
+    Data:      
+}
+symbol table section 5 ".symtab" {
     Type:      SHT_SYMTAB
     Flags:     []
     Addr:      0x0000000000000000
     AddrAlign: 0x0000000000000008
     EntSize:   0x0000000000000018
-    Info:      0x0000000b
-    Link:      0x00000003
+    Info:      0x0000000c
+    Link:      0x00000004
     Data:      
         symbol "" {
             Bind:  STB_Local
@@ -38,6 +48,13 @@ symbol table section 4 ".symtab" {
             ShNdx: SHN_Undef
             Value: 0x0000000000000000
             Size:  0x0000000000000000
+        }
+        symbol "$bss@0" {
+            Bind:  STB_Local
+            Type:  STT_Object
+            ShNdx: SHN_EXT 3
+            Value: 0x0000000000000000
+            Size:  0x000000000000000a
         }
         symbol "$20" {
             Bind:  STB_Local
@@ -117,7 +134,7 @@ symbol table section 4 ".symtab" {
             Size:  0x0000000000000000
         }
 }
-section 3 ".strtab" {
+section 4 ".strtab" {
     Type:      SHT_STRTAB
     Flags:     []
     Addr:      0x0000000000000000
@@ -125,8 +142,9 @@ section 3 ".strtab" {
     EntSize:   0x0000000000000000
     Info:      0x00000000
     Link:      0x00000000
-    Data:      00 5f 73 74 61 72 74 00 24 37 32 00 24 34 30 00 # ._start.$72.$40.
-               24 34 32 00 24 34 34 00 24 34 38 00 24 35 36 00 # $42.$44.$48.$56.
-               24 36 34 00 24 31 32 00 24 31 33 00 24 32 30 00 # $64.$12.$13.$20.
+    Data:      00 5f 73 74 61 72 74 00 24 62 73 73 40 30 00 24 # ._start.$bss@0.$
+               37 32 00 24 34 30 00 24 34 32 00 24 34 34 00 24 # 72.$40.$42.$44.$
+               34 38 00 24 35 36 00 24 36 34 00 24 31 32 00 24 # 48.$56.$64.$12.$
+               31 33 00 24 32 30 00                            # 13.$20.
 }
 section table

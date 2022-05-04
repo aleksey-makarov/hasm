@@ -27,6 +27,7 @@ module Asm.Asm
     , Symbol
     , KnownArch (..)
     , RelocationType
+    , ArchElfClass
 
     -- * Assembler directives
     , label
@@ -88,6 +89,9 @@ class KnownArch a where
 
 type family RelocationType a = t | t -> a
 
+type ArchElfClass :: Type -> ElfClass
+type family ArchElfClass a = t | t -> a
+
 type CodeMonad a m = (MonadThrow m, MonadState (CodeState a) m)
 data Symbol
     = SymbolLocal Int
@@ -106,7 +110,7 @@ data TextChunk a
         , _bcData   :: Builder
         }
 
-data SymbolTableItem
+data SymbolTableItem c
     = SymbolTableItemTxtUnallocated
         { stiTxtUAlign  :: Int
         , stiTxtULength :: Int
@@ -117,9 +121,14 @@ data SymbolTableItem
         , stiTxtOffset :: SectionOffset
         }
     | SymbolTableItemDataUnallocated
-        { stiDataAlignment :: Int
-        , stiDataAccess    :: Access
-        , stiDataData      :: Data
+        { stiDataUName       :: Maybe String
+        , stiDataUAlignment  :: Int
+        , stiDataUVisibility :: Visibility
+        , stiDataUAccess     :: Access
+        , stiDataUData       :: Data
+        }
+    | SymbolTableItemElfSymbol
+        { stiElfSymbol :: ElfSymbolXX c
         }
 
 data RelocationTableItem a
@@ -135,9 +144,9 @@ data CodeState a
         , textReversed          :: [TextChunk a]
 
         , symbolsLocalNext      :: Int
-        , symbolsLocalReversed  :: [SymbolTableItem]
+        , symbolsLocalReversed  :: [SymbolTableItem (ArchElfClass a)]
         , symbolsNext           :: Int
-        , symbolsReversed       :: [SymbolTableItem]
+        , symbolsReversed       :: [SymbolTableItem (ArchElfClass a)]
 
         , relocations           :: [RelocationTableItem a]
         }
@@ -233,12 +242,17 @@ align a | a < (ltorgAlign (Proxy @a)) = $chainedError "align is too small"
         | otherwise                   = align' a
 
 data Visibility = Local | Global
-data Access = RO | RW
+data Access = RO | RW deriving Eq
 data Data
     = Uninitialized Int
-    | Initialized Builder
+    | Initialized ByteString
+        deriving Eq
 
-addSymbol :: MonadState (CodeState a) m => Visibility -> SymbolTableItem -> m Symbol
+dataSize :: Data -> Int
+dataSize (Uninitialized i) = i
+dataSize (Initialized bs) = fromIntegral $ BSL.length bs
+
+addSymbol :: MonadState (CodeState a) m => Visibility -> SymbolTableItem (ArchElfClass a) -> m Symbol
 addSymbol v newSymbolItem = state f where
     f CodeState {..} =
         case v of
@@ -259,9 +273,9 @@ addSymbol v newSymbolItem = state f where
                     }
                 )
 
-allocate :: MonadState (CodeState a) m => Int -> Visibility -> Access -> Data -> m Symbol
-allocate stiDataAlignment v stiDataAccess stiDataData =
-    addSymbol v $ SymbolTableItemDataUnallocated { .. }
+allocate :: MonadState (CodeState a) m => Maybe String -> Int -> Visibility -> Access -> Data -> m Symbol
+allocate stiDataUName stiDataUAlignment stiDataUVisibility stiDataUAccess stiDataUData =
+    addSymbol stiDataUVisibility $ SymbolTableItemDataUnallocated { .. }
 
 --------------------------------------------------------------------------------
 -- pool
@@ -309,15 +323,46 @@ long = word64
 --------------------------------------------------------------------------------
 -- assembler
 
-zeroIndexStringItem :: ElfSymbolXX 'ELFCLASS64
+zeroIndexStringItem :: IsElfClass c => ElfSymbolXX c
 zeroIndexStringItem = ElfSymbolXX "" 0 0 0 0 0
 
-data ElfCompositionState a
+data ElfCompositionState c
     = ElfCompositionState
         { ecsNextSectionN :: ElfSectionIndex
-        , ecsElfReversed  :: [ElfXX a]
-        , ecsSymbols      :: Array Int SymbolTableItem
+        , ecsElfReversed  :: [ElfXX c]
+        , ecsSymbols      :: Array Int (SymbolTableItem c)
         }
+
+data SymbolAllocationInfo tag
+    = SymbolAllocationInfo
+        { saiTag      :: tag
+        , saiAlignmet :: Int
+        , saiSize     :: Int
+        }
+
+-----------------------------------------
+-- move this to a separate layout module
+
+-- FIXME: implement this
+-- FIXME: unify with the other align function
+align2 :: MonadState Int m' => Int ->  m' ()
+align2 _ = return ()
+
+-- FIXME: optimize layout
+layout :: forall tag . [SymbolAllocationInfo tag] -> [(tag, Int)]
+layout sais =
+    let
+        f :: SymbolAllocationInfo tag -> State Int (tag, Int)
+        f SymbolAllocationInfo { .. } = do
+            align2 saiAlignmet
+            position <- get
+            modify (+ saiSize)
+            return (saiTag, position)
+    in
+        evalState (mapM f sais) 0
+
+--
+-----------------------------------------
 
 getNextSectionN :: Monad m => StateT (ElfCompositionState a) m ElfSectionIndex
 getNextSectionN = state f
@@ -339,7 +384,7 @@ addNewSection e = modify f
                 , ..
                 }
 
-splitMapReverseM :: MonadThrow m => (a -> m (Maybe b)) -> [a] -> m ([a], [b])
+splitMapReverseM :: Monad m => (a -> m (Maybe b)) -> [a] -> m ([a], [b])
 splitMapReverseM f l = foldlM f' ([], []) l
     where
         f' (a, b) x = f'' <$> f x
@@ -347,13 +392,13 @@ splitMapReverseM f l = foldlM f' ([], []) l
                 f'' Nothing = (x : a, b)
                 f'' (Just b') = (a, b' : b)
 
-assemble :: forall a m . (MonadCatch m, KnownArch a) => StateT (CodeState a) m () -> m Elf
+assemble :: forall a m . (MonadCatch m, KnownArch a, IsElfClass (ArchElfClass a)) => StateT (CodeState a) m () -> m Elf
 assemble m = do
 
     CodeState {..} <- execStateT (m >> ltorg') codeStateInit
 
     let
-        elfCompositionStateInit :: IsElfClass elfClass => ElfCompositionState elfClass
+        elfCompositionStateInit :: ElfCompositionState (ArchElfClass a)
         elfCompositionStateInit = ElfCompositionState 1 [h] symbolsArray
             where
                 h = ElfHeader
@@ -361,26 +406,14 @@ assemble m = do
                     , ehOSABI      = ELFOSABI_SYSV
                     , ehABIVersion = 0
                     , ehType       = ET_REL
-                    , ehMachine    = EM_AARCH64
+                    , ehMachine    = EM_AARCH64 -- FIXME: Wrong
                     , ehEntry      = 0
                     , ehFlags      = 0
                     }
                 symbols = P.reverse symbolsLocalReversed ++ P.reverse symbolsReversed
                 symbolsArray = listArray (0, P.length symbols - 1) symbols
 
-    -- FIXME: @'ELFCLASS64 -- wrong
-    ElfCompositionState { .. } <- flip execStateT (elfCompositionStateInit @'ELFCLASS64) $ do
-
-        ---------------------------------------------------------------------
-        -- labels
-        ---------------------------------------------------------------------
-
-        -- let
-        --     labelArray :: UArray Int Int64
-        --     labelArray = array (0, P.length labelTable - 1) (P.map (bimap id getSectionOffset) labelTable)
-
-        --     labelToSectionOffset :: Ref -> SectionOffset
-        --     labelToSectionOffset (Ref i) = SectionOffset $ labelArray ! i
+    ElfCompositionState { .. } <- flip execStateT elfCompositionStateInit $ do
 
         ---------------------------------------------------------------------
         -- txt
@@ -389,15 +422,16 @@ assemble m = do
         let
             text = P.reverse textReversed
 
-            getSymbolTableItem :: MonadState (ElfCompositionState elfClass) m' => Symbol -> m' SymbolTableItem
+            getSymbolTableItem :: MonadState (ElfCompositionState (ArchElfClass a)) m' =>
+                Symbol -> m' (SymbolTableItem (ArchElfClass a))
             getSymbolTableItem s = do
                 table <- gets ecsSymbols
                 return $ case s of
                     SymbolLocal i  -> table ! i
                     SymbolGlobal i -> table ! (i + symbolsLocalNext)
 
-            fTxtReloc :: (MonadThrow m', MonadState (ElfCompositionState elfClass) m') =>
-                                                                 RelocationTableItem a -> m' (Maybe (RelocationMonad ()))
+            fTxtReloc :: (MonadThrow m', MonadState (ElfCompositionState (ArchElfClass a)) m') =>
+                RelocationTableItem a -> m' (Maybe (RelocationMonad ()))
             fTxtReloc RelocationTableItem { .. } = do
                 s <- getSymbolTableItem lrSymbol
                 case s of
@@ -451,28 +485,81 @@ assemble m = do
         -- bss
         ---------------------------------------------------------------------
 
-        -- when (0 /= P.length bss) $ do
-        --     bssSecN <- getNextSectionN
-        --     addNewSection
-        --         ElfSection
-        --             { esName      = ".bss"
-        --             , esType      = SHT_NOBITS
-        --             , esFlags     = SHF_WRITE .|. SHF_ALLOC
-        --             , esAddr      = 0
-        --             , esAddrAlign = 1
-        --             , esEntSize   = 0
-        --             , esN         = bssSecN
-        --             , esLink      = 0
-        --             , esInfo      = 0
-        --             , esData      = ElfSectionData empty
-        --             }
+        let
+            findSymbolsFunc :: [SymbolAllocationInfo Int] -> (Int, SymbolTableItem c) -> [SymbolAllocationInfo Int]
+            findSymbolsFunc sais ( n
+                                 , i@SymbolTableItemDataUnallocated { stiDataUAccess = RW
+                                                                    , stiDataUData = Uninitialized _
+                                                                    , ..
+                                                                    }
+                                 ) =
+                let
+                    newSAI = SymbolAllocationInfo
+                        { saiTag      = n
+                        , saiAlignmet = stiDataUAlignment
+                        , saiSize     = dataSize $ stiDataUData i
+                        }
+                in
+                    newSAI : sais
+            findSymbolsFunc sais _ = sais
+
+            findSymbols :: MonadState (ElfCompositionState elfClass) m' => m' [SymbolAllocationInfo Int]
+            findSymbols = do
+                table <- gets ecsSymbols
+                return $ P.foldl findSymbolsFunc [] $ P.zip [0 ..] $ elems table
+
+            modifySymbols :: MonadState (ElfCompositionState c) m' =>
+                (Array Int (SymbolTableItem c) -> Array Int (SymbolTableItem c)) -> m' ()
+            modifySymbols f = modify f'
+                where
+                    f' ElfCompositionState { .. } =
+                        ElfCompositionState
+                            { ecsSymbols = f ecsSymbols
+                            , ..
+                            }
+
+        bss <- layout <$> findSymbols
+
+        when (0 /= P.length bss) $ do
+            bssSecN <- getNextSectionN
+            addNewSection
+                ElfSection
+                    { esName      = ".bss"
+                    , esType      = SHT_NOBITS
+                    , esFlags     = SHF_WRITE .|. SHF_ALLOC
+                    , esAddr      = 0
+                    , esAddrAlign = 1
+                    , esEntSize   = 0
+                    , esN         = bssSecN
+                    , esLink      = 0
+                    , esInfo      = 0
+                    , esData      = ElfSectionData empty
+                    }
+
+            let
+                accumFunc :: IsElfClass c => SymbolTableItem c -> Int -> SymbolTableItem c
+                accumFunc SymbolTableItemDataUnallocated { .. } n =
+                    SymbolTableItemElfSymbol $ ElfSymbolXX { .. }
+                        where
+                            steName  = maybe ("$bss@" ++ show n) id stiDataUName
+                            steBind  = case stiDataUVisibility of { Local -> STB_Local; Global -> STB_Global }
+                            steType  = STT_Object
+                            steShNdx = bssSecN
+                            steValue = fromIntegral n
+                            steSize  = fromIntegral $ dataSize stiDataUData
+                accumFunc _ _ = error "internal error: FIXME"
+
+                modifySymbolsFunction :: IsElfClass c => Array Int (SymbolTableItem c) -> Array Int (SymbolTableItem c)
+                modifySymbolsFunction a = accum accumFunc a bss
+
+            modifySymbols modifySymbolsFunction
 
         ---------------------------------------------------------------------
         -- symbols
         ---------------------------------------------------------------------
 
         let
-            fSymbol :: SymbolTableItem -> ElfSymbolXX 'ELFCLASS64
+            fSymbol :: IsElfClass c => SymbolTableItem c -> ElfSymbolXX c
             -- This should have been allocated in ltorg'
             fSymbol SymbolTableItemTxtUnallocated {} = error "internal error: SymbolTableItemTxtUnallocated"
             fSymbol SymbolTableItemTxt { stiTxtName = Nothing, .. } =
@@ -484,7 +571,7 @@ assemble m = do
                     steValue = fromIntegral stiTxtOffset
                     steSize  = 0
                 in
-                    ElfSymbolXX{..}
+                    ElfSymbolXX { .. }
             fSymbol SymbolTableItemTxt { stiTxtName = Just name, .. } =
                 let
                     steName  = name
@@ -494,13 +581,15 @@ assemble m = do
                     steValue = fromIntegral stiTxtOffset
                     steSize  = 0
                 in
-                    ElfSymbolXX{..}
+                    ElfSymbolXX { .. }
+            fSymbol SymbolTableItemElfSymbol { .. } = stiElfSymbol
             fSymbol SymbolTableItemDataUnallocated {} = error "internal error: SymbolTableItemDataUnallocated"
 
             numLocal = fromIntegral symbolsLocalNext
 
         symbolTable <- (fmap fSymbol . elems) <$> gets ecsSymbols
 
+        -- FIXME: ELFDATA2LSB -- wrong
         (symbolTableData, stringTableData) <- serializeSymbolTable ELFDATA2LSB (zeroIndexStringItem : symbolTable)
 
         strtabSecN   <- getNextSectionN
@@ -513,7 +602,7 @@ assemble m = do
                 , esFlags     = 0
                 , esAddr      = 0
                 , esAddrAlign = 8
-                , esEntSize   = symbolTableEntrySize ELFCLASS64
+                , esEntSize   = symbolTableEntrySize $ fromSing $ sing @(ArchElfClass a)
                 , esN         = symtabSecN
                 , esLink      = fromIntegral strtabSecN
                 , esInfo      = numLocal + 1
@@ -540,4 +629,4 @@ assemble m = do
 
         addNewSection ElfSectionTable
 
-    return $ SELFCLASS64 :&: (ElfList $ P.reverse ecsElfReversed)
+    return $ sing :&: (ElfList $ P.reverse ecsElfReversed)

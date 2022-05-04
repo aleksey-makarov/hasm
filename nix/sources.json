@@ -17,10 +17,10 @@
         "homepage": "",
         "owner": "aleksey-makarov",
         "repo": "melf",
-        "rev": "b829bad14f7f90e88b1c52ba01faa5faa332ce7b",
-        "sha256": "0ndhcp60kird4sjy27ys9jy3i7lvna8i0idixl2kp6238zb4ri6s",
+        "rev": "1b47ea13a73e82db69fa5a91d68b5da235f2d000",
+        "sha256": "01df2qvd60dh5cwhy10dbiimkl9q81a9h6icf55idv1f8y6qks5c",
         "type": "tarball",
-        "url": "https://github.com/aleksey-makarov/melf/archive/b829bad14f7f90e88b1c52ba01faa5faa332ce7b.tar.gz",
+        "url": "https://github.com/aleksey-makarov/melf/archive/1b47ea13a73e82db69fa5a91d68b5da235f2d000.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "niv": {
