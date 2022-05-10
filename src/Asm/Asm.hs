@@ -343,23 +343,26 @@ data SymbolAllocationInfo tag
 -----------------------------------------
 -- move this to a separate layout module
 
--- FIXME: implement this
--- FIXME: unify with the other align function
-align2 :: MonadState Int m' => Int ->  m' ()
-align2 _ = return ()
+-- FIXME: unify with the other align function (?)
+align2 :: (MonadState Int m', MonadThrow m') => Int ->  m' ()
+align2 0                       = return ()
+align2 1                       = return ()
+align2 a | a < 0               = $chainedError "negative align"
+         | not (isPower2 a)    = $chainedError "align is not a power of 2"
+         | otherwise           = modify $ \ o -> (o + a - 1) .&. complement (a - 1)
 
 -- FIXME: optimize layout
-layout :: forall tag . [SymbolAllocationInfo tag] -> [(tag, Int)]
+layout :: MonadThrow m => [SymbolAllocationInfo tag] -> m [(tag, Int)]
 layout sais =
     let
-        f :: SymbolAllocationInfo tag -> State Int (tag, Int)
+        f :: (MonadThrow m, MonadState Int m) => SymbolAllocationInfo tag -> m (tag, Int)
         f SymbolAllocationInfo { .. } = do
             align2 saiAlignmet
             position <- get
             modify (+ saiSize)
             return (saiTag, position)
     in
-        evalState (mapM f sais) 0
+        evalStateT (mapM f sais) 0
 
 --
 -----------------------------------------
@@ -518,7 +521,7 @@ assemble m = do
                             , ..
                             }
 
-        bss <- layout <$> findSymbols
+        bss <- layout =<< findSymbols
 
         when (0 /= P.length bss) $ do
             bssSecN <- getNextSectionN
