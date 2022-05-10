@@ -121,8 +121,7 @@ data SymbolTableItem c
         , stiTxtOffset :: SectionOffset
         }
     | SymbolTableItemDataUnallocated
-        { stiDataUName       :: Maybe String
-        , stiDataUAlignment  :: Int
+        { stiDataUAlignment  :: Int
         , stiDataUVisibility :: Visibility
         , stiDataUAccess     :: Access
         , stiDataUData       :: Data
@@ -241,8 +240,13 @@ align :: forall a m . (KnownArch a, CodeMonad a m) => Int -> m ()
 align a | a < (ltorgAlign (Proxy @a)) = $chainedError "align is too small"
         | otherwise                   = align' a
 
-data Visibility = Local | Global
-data Access = RO | RW deriving Eq
+data Visibility
+    = Local
+    | Global String
+data Access
+    = RO
+    | RW
+        deriving Eq
 data Data
     = Uninitialized Int
     | Initialized ByteString
@@ -252,41 +256,52 @@ dataSize :: Data -> Int
 dataSize (Uninitialized i) = i
 dataSize (Initialized bs) = fromIntegral $ BSL.length bs
 
-addSymbol :: MonadState (CodeState a) m => Visibility -> SymbolTableItem (ArchElfClass a) -> m Symbol
-addSymbol v newSymbolItem = state f where
+addSymbolGlobal :: MonadState (CodeState a) m => SymbolTableItem (ArchElfClass a) -> m Symbol
+addSymbolGlobal newSymbolItem = state f where
     f CodeState {..} =
-        case v of
-            Local ->
-                ( SymbolLocal symbolsLocalNext
-                , CodeState
-                    { symbolsLocalNext = 1 + symbolsLocalNext
-                    , symbolsLocalReversed = newSymbolItem : symbolsLocalReversed
-                    , ..
-                    }
-                )
-            Global ->
-                ( SymbolGlobal symbolsNext
-                , CodeState
-                    { symbolsNext = 1 + symbolsNext
-                    , symbolsReversed = newSymbolItem : symbolsReversed
-                    , ..
-                    }
-                )
+        ( SymbolGlobal symbolsNext
+        , CodeState
+            { symbolsNext = 1 + symbolsNext
+            , symbolsReversed = newSymbolItem : symbolsReversed
+            , ..
+            }
+        )
 
-allocate :: MonadState (CodeState a) m => Maybe String -> Int -> Visibility -> Access -> Data -> m Symbol
-allocate stiDataUName stiDataUAlignment stiDataUVisibility stiDataUAccess stiDataUData =
-    addSymbol stiDataUVisibility $ SymbolTableItemDataUnallocated { .. }
+addSymbolLocal :: MonadState (CodeState a) m => SymbolTableItem (ArchElfClass a) -> m Symbol
+addSymbolLocal newSymbolItem = state f where
+    f CodeState {..} =
+        ( SymbolLocal symbolsLocalNext
+        , CodeState
+            { symbolsLocalNext = 1 + symbolsLocalNext
+            , symbolsLocalReversed = newSymbolItem : symbolsLocalReversed
+            , ..
+            }
+        )
+
+allocate :: MonadState (CodeState a) m => Visibility -> Access -> Int -> Data -> m Symbol
+allocate stiDataUVisibility stiDataUAccess stiDataUAlignment stiDataUData =
+    let
+        s = SymbolTableItemDataUnallocated { .. }
+    in
+        case stiDataUVisibility of
+            Local    -> addSymbolLocal  s
+            Global _ -> addSymbolGlobal s
 
 --------------------------------------------------------------------------------
 -- pool
 
 emitPool' :: MonadState (CodeState a) m => Maybe String -> SectionOffset -> m Symbol
 emitPool' stiTxtName stiTxtOffset =
-    addSymbol (maybe Local (const Global) stiTxtName) (SymbolTableItemTxt { .. })
+    let
+        s = SymbolTableItemTxt { .. }
+    in
+        case stiTxtName of
+            Nothing -> addSymbolLocal  s
+            Just _  -> addSymbolGlobal s
 
 emitPool :: MonadState (CodeState a) m => Int -> Int -> Builder -> m Symbol
 emitPool stiTxtUAlign stiTxtULength stiTxtUData =
-    addSymbol Local $ SymbolTableItemTxtUnallocated { .. }
+    addSymbolLocal $ SymbolTableItemTxtUnallocated { .. }
 
 label :: MonadState (CodeState a) m => m Symbol
 label = offset >>= emitPool' Nothing
@@ -544,8 +559,9 @@ assemble m = do
                 accumFunc SymbolTableItemDataUnallocated { .. } n =
                     SymbolTableItemElfSymbol $ ElfSymbolXX { .. }
                         where
-                            steName  = maybe ("$bss@" ++ show n) id stiDataUName
-                            steBind  = case stiDataUVisibility of { Local -> STB_Local; Global -> STB_Global }
+                            (steName, steBind) = case stiDataUVisibility of
+                                Local       -> ("$bss@" ++ show n, STB_Local)
+                                Global name -> (name, STB_Global)
                             steType  = STT_Object
                             steShNdx = bssSecN
                             steValue = fromIntegral n

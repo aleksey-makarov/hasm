@@ -15,7 +15,7 @@ dontRun = do
 
     void $ labelExtern "_start"
 
-    _bss1 <- allocate Nothing 0 Local RW (Uninitialized 10)
+    _bss1 <- allocate Local RW 0 (Uninitialized 10)
 
     _a <- ascii "ascii"
     _az <- asciiz "asciiz"
