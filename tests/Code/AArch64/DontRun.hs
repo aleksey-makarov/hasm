@@ -16,6 +16,9 @@ dontRun = do
     void $ labelExtern "_start"
 
     _bss1 <- allocateBSS 0 10
+    _bss2 <- allocateBSS 4 4
+    _bss3 <- allocateBSS 0 3
+    _bss4 <- allocateBSS 2 2
 
     _a <- ascii "ascii"
     _az <- asciiz "asciiz"

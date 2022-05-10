@@ -38,21 +38,21 @@ symbol table section 4 ".symtab" {
             Value: 0x0000000000000000
             Size:  0x0000000000000000
         }
-        symbol "$48" {
+        symbol "$text@48" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000030
             Size:  0x0000000000000000
         }
-        symbol "$44" {
+        symbol "$text@44" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x000000000000002c
             Size:  0x0000000000000000
         }
-        symbol "$24" {
+        symbol "$text@24" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
@@ -75,7 +75,8 @@ section 3 ".strtab" {
     EntSize:   0x0000000000000000
     Info:      0x00000000
     Link:      0x00000000
-    Data:      00 5f 73 74 61 72 74 00 24 32 34 00 24 34 34 00 # ._start.$24.$44.
-               24 34 38 00                                     # $48.
+    Data:      00 24 74 65 78 74 40 32 34 00 24 74 65 78 74 40 # .$text@24.$text@
+               34 34 00 24 74 65 78 74 40 34 38 00 5f 73 74 61 # 44.$text@48._sta
+               72 74 00                                        # rt.
 }
 section table

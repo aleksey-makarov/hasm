@@ -39,7 +39,7 @@ symbol table section 5 ".symtab" {
     Addr:      0x0000000000000000
     AddrAlign: 0x0000000000000008
     EntSize:   0x0000000000000018
-    Info:      0x0000000c
+    Info:      0x0000000f
     Link:      0x00000004
     Data:      
         symbol "" {
@@ -56,70 +56,91 @@ symbol table section 5 ".symtab" {
             Value: 0x0000000000000000
             Size:  0x000000000000000a
         }
-        symbol "$20" {
+        symbol "$bss@12" {
+            Bind:  STB_Local
+            Type:  STT_Object
+            ShNdx: SHN_EXT 3
+            Value: 0x000000000000000c
+            Size:  0x0000000000000004
+        }
+        symbol "$bss@16" {
+            Bind:  STB_Local
+            Type:  STT_Object
+            ShNdx: SHN_EXT 3
+            Value: 0x0000000000000010
+            Size:  0x0000000000000003
+        }
+        symbol "$bss@20" {
+            Bind:  STB_Local
+            Type:  STT_Object
+            ShNdx: SHN_EXT 3
+            Value: 0x0000000000000014
+            Size:  0x0000000000000002
+        }
+        symbol "$text@20" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000014
             Size:  0x0000000000000000
         }
-        symbol "$13" {
+        symbol "$text@13" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x000000000000000d
             Size:  0x0000000000000000
         }
-        symbol "$12" {
+        symbol "$text@12" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x000000000000000c
             Size:  0x0000000000000000
         }
-        symbol "$64" {
+        symbol "$text@64" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000040
             Size:  0x0000000000000000
         }
-        symbol "$56" {
+        symbol "$text@56" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000038
             Size:  0x0000000000000000
         }
-        symbol "$48" {
+        symbol "$text@48" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000030
             Size:  0x0000000000000000
         }
-        symbol "$44" {
+        symbol "$text@44" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x000000000000002c
             Size:  0x0000000000000000
         }
-        symbol "$42" {
+        symbol "$text@42" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x000000000000002a
             Size:  0x0000000000000000
         }
-        symbol "$40" {
+        symbol "$text@40" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000028
             Size:  0x0000000000000000
         }
-        symbol "$72" {
+        symbol "$text@72" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
@@ -142,9 +163,14 @@ section 4 ".strtab" {
     EntSize:   0x0000000000000000
     Info:      0x00000000
     Link:      0x00000000
-    Data:      00 5f 73 74 61 72 74 00 24 62 73 73 40 30 00 24 # ._start.$bss@0.$
-               37 32 00 24 34 30 00 24 34 32 00 24 34 34 00 24 # 72.$40.$42.$44.$
-               34 38 00 24 35 36 00 24 36 34 00 24 31 32 00 24 # 48.$56.$64.$12.$
-               31 33 00 24 32 30 00                            # 13.$20.
+    Data:      00 24 74 65 78 74 40 37 32 00 24 74 65 78 74 40 # .$text@72.$text@
+               34 30 00 24 74 65 78 74 40 34 32 00 24 74 65 78 # 40.$text@42.$tex
+               74 40 34 34 00 24 74 65 78 74 40 34 38 00 24 74 # t@44.$text@48.$t
+               65 78 74 40 35 36 00 24 74 65 78 74 40 36 34 00 # ext@56.$text@64.
+               24 74 65 78 74 40 31 32 00 24 74 65 78 74 40 31 # $text@12.$text@1
+               33 00 24 74 65 78 74 40 32 30 00 24 62 73 73 40 # 3.$text@20.$bss@
+               32 30 00 24 62 73 73 40 31 36 00 24 62 73 73 40 # 20.$bss@16.$bss@
+               31 32 00 5f 73 74 61 72 74 00 24 62 73 73 40 30 # 12._start.$bss@0
+               00                                              # .
 }
 section table

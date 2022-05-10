@@ -414,6 +414,9 @@ splitMapReverseM f l = foldlM f' ([], []) l
                 f'' Nothing = (x : a, b)
                 f'' (Just b') = (a, b' : b)
 
+mkSymbolName :: Show n => String -> n -> String
+mkSymbolName s n = "$" ++ s ++ "@" ++ show n -- FIXME: use hexadecimal
+
 assemble :: forall a m . (MonadCatch m, KnownArch a, IsElfClass (ArchElfClass a)) => StateT (CodeState a) m () -> m Elf
 assemble m = do
 
@@ -540,7 +543,7 @@ assemble m = do
                             , ..
                             }
 
-        bss <- layout =<< findSymbols
+        bss <- layout =<< (P.reverse <$> findSymbols)
 
         when (0 /= P.length bss) $ do
             bssSecN <- getNextSectionN
@@ -564,7 +567,7 @@ assemble m = do
                     SymbolTableItemElfSymbol $ ElfSymbolXX { .. }
                         where
                             (steName, steBind) = case stiDataUVisibility of
-                                Local       -> ("$bss@" ++ show n, STB_Local)
+                                Local       -> (mkSymbolName "bss" n, STB_Local)
                                 Global name -> (name, STB_Global)
                             steType  = STT_Object
                             steShNdx = bssSecN
@@ -587,7 +590,7 @@ assemble m = do
             fSymbol SymbolTableItemTxtUnallocated {} = error "internal error: SymbolTableItemTxtUnallocated"
             fSymbol SymbolTableItemTxt { stiTxtName = Nothing, .. } =
                 let
-                    steName  = "$" ++ (show $ getSectionOffset stiTxtOffset)
+                    steName  = mkSymbolName "text" $ getSectionOffset stiTxtOffset
                     steBind  = STB_Local
                     steType  = STT_NoType
                     steShNdx = textSecN
