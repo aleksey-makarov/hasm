@@ -41,6 +41,7 @@ module Asm.Asm
     , Data (..)
     , Visibility (..)
     , allocate
+    , allocateBSS
 
     , ascii, asciiz
     , byte, short, word, long
@@ -286,6 +287,9 @@ allocate stiDataUVisibility stiDataUAccess stiDataUAlignment stiDataUData =
         case stiDataUVisibility of
             Local    -> addSymbolLocal  s
             Global _ -> addSymbolGlobal s
+
+allocateBSS :: MonadState (CodeState a) m => Int -> Int -> m Symbol
+allocateBSS alignment size = allocate Local RW alignment $ Uninitialized size
 
 --------------------------------------------------------------------------------
 -- pool
