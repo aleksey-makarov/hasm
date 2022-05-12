@@ -35,8 +35,8 @@ makeFileExecutable path = do
 readFileStrict :: FilePath -> IO BSL.ByteString
 readFileStrict path = BSL.fromStrict <$> BS.readFile path
 
-runExe :: String -> IO String
-runExe name = readProcess "qemu-aarch64" [f] []
+runExe :: String -> String -> IO String
+runExe name stdin = readProcess "qemu-aarch64" [f] stdin
     where
         f = testsOutDir </> name
 
@@ -59,6 +59,10 @@ ldGcc name = callProcess "aarch64-unknown-linux-gnu-gcc" [i, "-nostdlib", "-o", 
         i = testsOutDir </> name <.> "o"
         o = testsOutDir </> name <.> "gcc"
 
+testBssExample :: TestTree
+testBssExample = testCase "bssExample" $ do
+    out <- runExe (".." </> "test_bss.gcc") "12345678 00000001"
+    out @?= "12345679"
 
 testExe :: String -> StateT (CodeState AArch64) IO () -> Maybe String -> [ TestTree ]
 testExe name code maybeExpectedString =
@@ -70,11 +74,11 @@ testExe name code maybeExpectedString =
             Just expectedString ->
                 [ testCase mkGccLdTestName $ ldGcc name
                 , after AllSucceed mkGccLdTestName $ localOption (mkTimeout 500000) $ testCase runGccLdTestName $ do
-                    out <- runExe $ name <.> "gcc"
+                    out <- runExe (name <.> "gcc") ""
                     out @?= expectedString
                 , testCase mkDummyLdTestName $ ldDummy name
                 , after AllSucceed mkDummyLdTestName $ localOption (mkTimeout 500000) $ testCase runDummyLdTestName $ do
-                    out <- runExe $ name <.> "dummy"
+                    out <- runExe (name <.> "dummy") ""
                     out @?= expectedString
                 ]
             Nothing -> []
@@ -100,4 +104,5 @@ main = defaultMain $ testGroup "tests"
     ++ testExe "forwardLabel" forwardLabel (Just "ok\n")
     -- ++ testExe "testBss"      testBss "abcdefghijklmnop\n"
     ++ testExe "dontRun"      dontRun      Nothing
+    ++ [ testBssExample ]
     )
