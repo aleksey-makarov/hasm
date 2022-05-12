@@ -1,5 +1,5 @@
 PREFIX = aarch64-unknown-linux-gnu-
-CFLAGS = -Wall
+CFLAGS = -Wall -Wextra -pedantic
 CC = $(PREFIX)gcc
 LDFLAGS = -nostdlib
 
@@ -14,7 +14,7 @@ all : $(ALL)
 test_bss.gcc : LDFLAGS =
 
 %.S : %.c
-	$(CC) -S $< -o $@
+	$(CC) $(CFLAGS) -S $< -o $@
 
 %.gcc : %.o
 	$(CC) $(LDFLAGS) $< -o $@

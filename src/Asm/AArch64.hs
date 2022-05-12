@@ -56,8 +56,9 @@ data AArch64
 instance KnownArch AArch64 where
     data Instruction AArch64 = Instruction { getInstruction :: Word32 } -- deriving (Eq, Show, Ord, Num, Enum, Real, Integral, Bits, FiniteBits)
     instructionSize = const 4
-    ltorgAlign = const 4
     serializeInstruction = word32LE . getInstruction
+
+    ltorgAlign = const 4
     mkRelocation = mkRelocationAArch64
 
 type instance RelocationType AArch64 = ElfRelocationType_AARCH64

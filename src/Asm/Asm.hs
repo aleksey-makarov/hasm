@@ -78,8 +78,9 @@ class KnownArch a where
     data Instruction a :: Type
 
     instructionSize :: Num b => Instruction a -> b
-    ltorgAlign :: Proxy a -> Int
     serializeInstruction :: Instruction a -> Builder
+
+    ltorgAlign :: Proxy a -> Int
     mkRelocation ::
             MonadThrow m =>
         RelocationType a ->
