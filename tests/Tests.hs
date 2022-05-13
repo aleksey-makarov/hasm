@@ -7,12 +7,16 @@ import Data.Bits
 import Data.ByteString as BS
 import Data.ByteString.Lazy as BSL
 import Data.Elf
+import Data.Word
+import Numeric
 import System.FilePath
 import System.Posix.Files
 import System.Process
 import Test.Tasty
 import Test.Tasty.Golden
 import Test.Tasty.HUnit
+import Test.Tasty.QuickCheck
+import Test.QuickCheck.Monadic as QC.Monadic
 
 import Asm.Asm
 import Asm.AArch64
@@ -59,11 +63,6 @@ ldGcc name = callProcess "aarch64-unknown-linux-gnu-gcc" [i, "-nostdlib", "-o", 
         i = testsOutDir </> name <.> "o"
         o = testsOutDir </> name <.> "gcc"
 
-testBssExample :: TestTree
-testBssExample = testCase "bssExample" $ do
-    out <- runExe (".." </> "test_bss.gcc") "12345678 00000001"
-    out @?= "12345679"
-
 testExe :: String -> StateT (CodeState AArch64) IO () -> Maybe String -> [ TestTree ]
 testExe name code maybeExpectedString =
     [ testCase mkObjTestName $ mkObj name code
@@ -98,11 +97,37 @@ testExe name code maybeExpectedString =
 
         mkDump             = callCommand ("hobjdump -f " ++ objName ++ " > " ++ dumpOutName)
 
+--------------------------------------------------
+--
+
+padLeadingZeros :: Int -> String -> String
+padLeadingZeros n s | P.length s > n = error "padLeadingZeros args"
+                    | otherwise = P.replicate (n - P.length s) '0' ++ s
+
+printWord32 :: Word32 -> String
+printWord32 n = padLeadingZeros 8 $ showHex n ""
+
+readWord32 :: String -> Word32
+readWord32 s = case readHex s of
+    [(res, "")] -> res
+    _ -> error "readHex error"
+
+prop_sum :: (Word32, Word32) -> Property
+prop_sum (aw, bw) = monadicIO $ do
+    retString <- run $ runExe (".." </> "test_bss.gcc") (printWord32 aw ++ " " ++ printWord32 bw)
+    QC.Monadic.assert (aw + bw == readWord32 retString)
+
+testPropSum :: TestTree
+testPropSum = testProperty "bssExampleProperty" prop_sum
+
+--
+--------------------------------------------------
+
 main :: IO ()
 main = defaultMain $ testGroup "tests"
     (  testExe "helloWorld"   helloWorld   (Just "Hello World!\n")
     ++ testExe "forwardLabel" forwardLabel (Just "ok\n")
     -- ++ testExe "testBss"      testBss "abcdefghijklmnop\n"
     ++ testExe "dontRun"      dontRun      Nothing
-    ++ [ testBssExample ]
+    ++ [ testPropSum ]
     )

@@ -46,9 +46,11 @@ tests:
       - melf
       - mtl
       - process
+      - QuickCheck
       - tasty
       - tasty-golden
       - tasty-hunit
+      - tasty-quickcheck
       - unix
 
 executables:
