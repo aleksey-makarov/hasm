@@ -24,7 +24,7 @@ import Asm.DummyLd
 
 import Code.AArch64.HelloWorld
 import Code.AArch64.ForwardLabel
--- import Code.AArch64.TestBss
+import Code.AArch64.TestBss
 import Code.AArch64.DontRun
 
 testsOutDir :: FilePath
@@ -118,7 +118,10 @@ prop_sum (aw, bw) = monadicIO $ do
     QC.Monadic.assert (aw + bw == readWord32 retString)
 
 testPropSum :: TestTree
-testPropSum = testProperty "bssExampleProperty" prop_sum
+testPropSum = testProperty "bssExample_testProperty" prop_sum
+
+compileBss :: TestTree
+compileBss = testCase "bssExample_mkobj" $ mkObj "testBss" testBss
 
 --
 --------------------------------------------------
@@ -127,7 +130,6 @@ main :: IO ()
 main = defaultMain $ testGroup "tests"
     (  testExe "helloWorld"   helloWorld   (Just "Hello World!\n")
     ++ testExe "forwardLabel" forwardLabel (Just "ok\n")
-    -- ++ testExe "testBss"      testBss "abcdefghijklmnop\n"
     ++ testExe "dontRun"      dontRun      Nothing
-    ++ [ testPropSum ]
+    ++ [ compileBss, testPropSum ]
     )

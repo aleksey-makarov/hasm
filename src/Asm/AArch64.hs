@@ -1,3 +1,4 @@
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
@@ -18,20 +19,28 @@ module Asm.AArch64
 
     -- * Registers
     , Register
-    , x0, x1, x2, x8
+    , x0, x1, x2, x8, x30
     , w0, w1
 
     -- * Instructions
     , instr
+    , add
     , adr
+    , Asm.AArch64.and
     , b
+    , cmp
+    , Cond (..)
+    , csel
+    , ldr
     , MovData (..)
     , movk
     , movn
     , movz
-    , ldr
+    , ret
     , svc
     ) where
+
+import Prelude as P hiding (EQ, GT, LT)
 
 import Control.Exception.ContextTH
 import Control.Monad
@@ -67,11 +76,12 @@ type instance ArchElfClass AArch64 = 'ELFCLASS64
 type Register :: RegisterWidth -> Type
 newtype Register c = R Word32
 
-x0, x1, x2, x8 :: Register 'X
-x0 = R 0
-x1 = R 1
-x2 = R 2
-x8 = R 8
+x0, x1, x2, x8, x30 :: Register 'X
+x0  = R 0
+x1  = R 1
+x2  = R 2
+x8  = R 8
+x30 = R 30
 
 w0, w1 :: Register 'W
 w0 = R 0
@@ -97,6 +107,11 @@ instrReloc w l r = emitReloc (Instruction w) l r
 --     a <- offset
 --     void $ emit (Instruction w) (Just $ LabelRelocation l r a)
 
+-- | C6.2.4 AND
+
+add :: CodeMonad AArch64 m => Register w -> Register w -> Word21 -> m () -- FIXME
+add = undefined
+
 -- | C6.2.10 ADR
 adr_ :: Register 'X -> Word21 -> Word32
 adr_ (R n) imm21 = 0x10000000 .|. imm .|. n
@@ -118,6 +133,11 @@ instance ArgADR Symbol where
 --   | not $ isBitN 21 o = $chainedError "offset is too big"
 --   | otherwise         = return $ fromIntegral (o .&. mask 21)
 
+-- | C6.2.12 AND
+
+and :: CodeMonad AArch64 m => Register w -> Register w -> Word21 -> m () -- FIXME
+and = undefined
+
 -- | C6.2.26 B
 b_ :: Word26 -> Word32
 b_ imm26 = 0x14000000 .|. imm26'
@@ -136,6 +156,55 @@ instance ArgB Symbol where
 --   | o .&. 0x3 /= 0    = $chainedError $ "offset is not aligned: " ++ show o
 --   | not $ isBitN 28 o = $chainedError "offset is too big"
 --   | otherwise         = return $ fromIntegral ((o `shiftR` 2) .&. mask 26)
+
+-- | C6.2.61 CMP
+
+cmp :: CodeMonad AArch64 m => Register w -> Word21 -> m ()-- FIXME
+cmp = undefined
+
+-- | C6.2.69 CSEL
+
+data Cond = EQ -- Equal
+          | NE -- Not Equal
+          | HI -- Unsigned Higher
+          | HS -- Unsigned Higher or Same
+          | LS -- Unsigned Lower or Same
+          | LO -- Unsigned Lower
+          | GT -- Signed Greater Than
+          | GE -- Signed Greater Than or Equal
+          | LE -- Signed Less Than or Equal
+          | LT -- Signed Less Than
+          | CS -- Unsigned Overflow (Carry Set)
+          | CC -- No Unsigned Overflow (Carry Clear)
+          | VS -- Signed Overflow
+          | VC -- No Signed Overflow
+          | MI -- Minus, Negative
+          | PL -- Plus, Positive or Zero
+          | AL -- Always Executed
+          | NV -- Never Executed
+
+condToEnc :: Cond -> Word32
+condToEnc EQ = 0b0000
+condToEnc NE = 0b0001
+condToEnc HI = 0b1000
+condToEnc HS = 0b0010
+condToEnc LS = 0b1001
+condToEnc LO = 0b0011
+condToEnc GT = 0b1100
+condToEnc GE = 0b1010
+condToEnc LE = 0b1101
+condToEnc LT = 0b1011
+condToEnc CS = 0b0010
+condToEnc CC = 0b0011
+condToEnc VS = 0b0110
+condToEnc VC = 0b0111
+condToEnc MI = 0b0100
+condToEnc PL = 0b0101
+condToEnc AL = 0b1110
+condToEnc NV = 0b1111
+
+csel :: CodeMonad AArch64 m => Register w -> Register w -> Register w -> Cond -> m () -- FIXME
+csel = undefined
 
 -- | C6.2.190 MOVК
 data MovData = LSL0  Word16
@@ -187,9 +256,13 @@ ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
 --   | not $ isBitN 11 o = $chainedError "offset is too big"
 --   | otherwise         = return $ fromIntegral ((o `shiftR` 2) .&. mask 9)
 
+-- | C6.2.219 RET
+
+ret :: CodeMonad AArch64 m => Register 'X -> m ()
+ret = undefined
 
 -- | C6.2.317 SVC
-svc ::CodeMonad AArch64 m => Word16 -> m ()
+svc :: CodeMonad AArch64 m => Word16 -> m ()
 svc imm = instr $ 0xd4000001 .|. (fromIntegral imm `shift` 5)
 
 mkRelocationAArch64 ::
