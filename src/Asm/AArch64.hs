@@ -259,7 +259,7 @@ ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
 -- | C6.2.219 RET
 
 ret :: CodeMonad AArch64 m => Register 'X -> m ()
-ret _ = return ()
+ret (R n) = instr $ 0xd65f0000 .|. (n `shift` 5)
 
 -- | C6.2.317 SVC
 svc :: CodeMonad AArch64 m => Word16 -> m ()
