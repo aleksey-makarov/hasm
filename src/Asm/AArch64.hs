@@ -110,7 +110,7 @@ instrReloc w l r = emitReloc (Instruction w) l r
 -- | C6.2.4 AND
 
 add :: CodeMonad AArch64 m => Register w -> Register w -> Word21 -> m () -- FIXME
-add = undefined
+add _ _ _ = return ()
 
 -- | C6.2.10 ADR
 adr_ :: Register 'X -> Word21 -> Word32
@@ -136,7 +136,7 @@ instance ArgADR Symbol where
 -- | C6.2.12 AND
 
 and :: CodeMonad AArch64 m => Register w -> Register w -> Word21 -> m () -- FIXME
-and = undefined
+and _ _ _ = return ()
 
 -- | C6.2.26 B
 b_ :: Word26 -> Word32
@@ -159,8 +159,8 @@ instance ArgB Symbol where
 
 -- | C6.2.61 CMP
 
-cmp :: CodeMonad AArch64 m => Register w -> Word21 -> m ()-- FIXME
-cmp = undefined
+cmp :: CodeMonad AArch64 m => Register w -> Word21 -> m () -- FIXME
+cmp _ _ = return ()
 
 -- | C6.2.69 CSEL
 
@@ -204,7 +204,7 @@ condToEnc AL = 0b1110
 condToEnc NV = 0b1111
 
 csel :: CodeMonad AArch64 m => Register w -> Register w -> Register w -> Cond -> m () -- FIXME
-csel = undefined
+csel _ _ _ _ = return ()
 
 -- | C6.2.190 MOVК
 data MovData = LSL0  Word16
@@ -259,7 +259,7 @@ ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
 -- | C6.2.219 RET
 
 ret :: CodeMonad AArch64 m => Register 'X -> m ()
-ret = undefined
+ret _ = return ()
 
 -- | C6.2.317 SVC
 svc :: CodeMonad AArch64 m => Word16 -> m ()
