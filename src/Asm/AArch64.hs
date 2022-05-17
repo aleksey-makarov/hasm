@@ -115,10 +115,70 @@ instrReloc w l r = emitReloc (Instruction w) l r
 --     a <- offset
 --     void $ emit (Instruction w) (Just $ LabelRelocation l r a)
 
--- | C6.2.4 AND
+data ArithmeticArgument
+    = ExtendedRegister
+    | Immediate Word12
+    | ImmediateN Word12
+    | ShiftedRegister
 
-add :: CodeMonad AArch64 m => Register w -> Register w -> Word21 -> m () -- FIXME
-add _ _ _ = return ()
+data Cond = EQ -- Equal
+          | NE -- Not Equal
+          | HI -- Unsigned Higher
+          | HS -- Unsigned Higher or Same
+          | LS -- Unsigned Lower or Same
+          | LO -- Unsigned Lower
+          | GT -- Signed Greater Than
+          | GE -- Signed Greater Than or Equal
+          | LE -- Signed Less Than or Equal
+          | LT -- Signed Less Than
+          | CS -- Unsigned Overflow (Carry Set)
+          | CC -- No Unsigned Overflow (Carry Clear)
+          | VS -- Signed Overflow
+          | VC -- No Signed Overflow
+          | MI -- Minus, Negative
+          | PL -- Plus, Positive or Zero
+          | AL -- Always Executed
+          | NV -- Never Executed
+
+condToEnc :: Cond -> Word32
+condToEnc EQ = 0b0000
+condToEnc NE = 0b0001
+condToEnc HI = 0b1000
+condToEnc HS = 0b0010
+condToEnc LS = 0b1001
+condToEnc LO = 0b0011
+condToEnc GT = 0b1100
+condToEnc GE = 0b1010
+condToEnc LE = 0b1101
+condToEnc LT = 0b1011
+condToEnc CS = 0b0010
+condToEnc CC = 0b0011
+condToEnc VS = 0b0110
+condToEnc VC = 0b0111
+condToEnc MI = 0b0100
+condToEnc PL = 0b0101
+condToEnc AL = 0b1110
+condToEnc NV = 0b1111
+
+data MovData = LSL0  Word16
+             | LSL16 Word16
+             | LSL32 Word16
+             | LSL48 Word16
+
+-- | C6.2.4 ADD
+
+addImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word32 -> Word12 -> m ()
+addImmediate rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
+                                           .|. 0x11000000
+                                           .|. (sh `shift` 22)
+                                           .|. (imm `shift` 10)
+                                           .|. (n `shift` 5)
+                                           .|. d
+
+add :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> ArithmeticArgument -> m ()
+add rd rn (Immediate imm)  = addImmediate rd rn 0 imm
+add rd rn (ImmediateN imm) = addImmediate rd rn 1 imm
+add _ _ _ = undefined
 
 -- | C6.2.10 ADR
 adr_ :: Register 'X -> Word21 -> Word32
@@ -172,53 +232,10 @@ cmp rn arg = subs (mkReg rn 31) rn arg
 
 -- | C6.2.69 CSEL
 
-data Cond = EQ -- Equal
-          | NE -- Not Equal
-          | HI -- Unsigned Higher
-          | HS -- Unsigned Higher or Same
-          | LS -- Unsigned Lower or Same
-          | LO -- Unsigned Lower
-          | GT -- Signed Greater Than
-          | GE -- Signed Greater Than or Equal
-          | LE -- Signed Less Than or Equal
-          | LT -- Signed Less Than
-          | CS -- Unsigned Overflow (Carry Set)
-          | CC -- No Unsigned Overflow (Carry Clear)
-          | VS -- Signed Overflow
-          | VC -- No Signed Overflow
-          | MI -- Minus, Negative
-          | PL -- Plus, Positive or Zero
-          | AL -- Always Executed
-          | NV -- Never Executed
-
-condToEnc :: Cond -> Word32
-condToEnc EQ = 0b0000
-condToEnc NE = 0b0001
-condToEnc HI = 0b1000
-condToEnc HS = 0b0010
-condToEnc LS = 0b1001
-condToEnc LO = 0b0011
-condToEnc GT = 0b1100
-condToEnc GE = 0b1010
-condToEnc LE = 0b1101
-condToEnc LT = 0b1011
-condToEnc CS = 0b0010
-condToEnc CC = 0b0011
-condToEnc VS = 0b0110
-condToEnc VC = 0b0111
-condToEnc MI = 0b0100
-condToEnc PL = 0b0101
-condToEnc AL = 0b1110
-condToEnc NV = 0b1111
-
 csel :: CodeMonad AArch64 m => Register w -> Register w -> Register w -> Cond -> m () -- FIXME
 csel _ _ _ _ = return ()
 
 -- | C6.2.190 MOVК
-data MovData = LSL0  Word16
-             | LSL16 Word16
-             | LSL32 Word16
-             | LSL48 Word16
 
 movDataToInstrBits :: MovData -> Word32
 movDataToInstrBits d = s `shift` 21 .|. (fromIntegral w `shift` 5)
@@ -270,12 +287,6 @@ ret :: CodeMonad AArch64 m => Register 'X -> m ()
 ret (R n) = instr $ 0xd65f0000 .|. (n `shift` 5)
 
 -- | C6.2.315 SUBS
-
-data ArithmeticArgument
-    = ExtendedRegister
-    | Immediate Word12
-    | ImmediateN Word12
-    | ShiftedRegister
 
 subsImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word32 -> Word12 -> m ()
 subsImmediate rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)

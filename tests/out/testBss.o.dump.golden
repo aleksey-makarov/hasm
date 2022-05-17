@@ -16,8 +16,8 @@ section 1 ".text" {
     EntSize:   0x0000000000000000
     Info:      0x00000000
     Link:      0x00000000
-    Data:      1f 24 00 71 c0 03 5f d6 00 00 80 d2 a8 0b 80 d2 # .$.q.._.........
-               01 00 00 d4                                     # ....
+    Data:      1f 24 00 71 20 c0 00 11 21 5c 01 11 c0 03 5f d6 # .$.q ...!\...._.
+               00 00 80 d2 a8 0b 80 d2 01 00 00 d4             # ............
 }
 string table section 2 ".shstrtab"
 symbol table section 4 ".symtab" {
@@ -40,7 +40,7 @@ symbol table section 4 ".symtab" {
             Bind:  STB_Global
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
-            Value: 0x0000000000000008
+            Value: 0x0000000000000010
             Size:  0x0000000000000000
         }
 }
