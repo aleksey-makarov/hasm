@@ -19,7 +19,7 @@ intToChar :: CodeMonad AArch64 m => m ()
 intToChar = do
 
     and w1 w0 0xf
-    cmp w0    0x9
+    cmp w0    $ Immediate 0x9
     add w0 w1 0x30
     add w1 w1 0x57
     and w1 w1 0xff

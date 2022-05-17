@@ -22,6 +22,10 @@ module Asm.AArch64
     , x0, x1, x2, x8, x30
     , w0, w1
 
+    , ArithmeticArgument (..)
+    , Cond (..)
+    , MovData (..)
+
     -- * Instructions
     , instr
     , add
@@ -29,14 +33,13 @@ module Asm.AArch64
     , Asm.AArch64.and
     , b
     , cmp
-    , Cond (..)
     , csel
     , ldr
-    , MovData (..)
     , movk
     , movn
     , movz
     , ret
+    , subs
     , svc
     ) where
 
@@ -92,7 +95,12 @@ b64 _ = case sing @w of
     SX -> 1
     SW -> 0
 
-type Word9  = Word16
+-- First argument is used as a proxy here
+mkReg :: Register w -> Word32 -> Register w
+mkReg _ n = R n
+
+type Word9  = Word32
+type Word12 = Word32
 type Word21 = Word32
 type Word26 = Word32
 
@@ -159,8 +167,8 @@ instance ArgB Symbol where
 
 -- | C6.2.61 CMP
 
-cmp :: CodeMonad AArch64 m => Register w -> Word21 -> m () -- FIXME
-cmp _ _ = return ()
+cmp :: (CodeMonad AArch64 m, SingI w) => Register w -> ArithmeticArgument -> m () -- FIXME
+cmp rn arg = subs (mkReg rn 31) rn arg
 
 -- | C6.2.69 CSEL
 
@@ -260,6 +268,27 @@ ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
 
 ret :: CodeMonad AArch64 m => Register 'X -> m ()
 ret (R n) = instr $ 0xd65f0000 .|. (n `shift` 5)
+
+-- | C6.2.315 SUBS
+
+data ArithmeticArgument
+    = ExtendedRegister
+    | Immediate Word12
+    | ImmediateN Word12
+    | ShiftedRegister
+
+subsImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word32 -> Word12 -> m ()
+subsImmediate rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
+                                           .|. 0x71000000
+                                           .|. (sh `shift` 22)
+                                           .|. (imm `shift` 10)
+                                           .|. (n `shift` 5)
+                                           .|. d
+
+subs :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> ArithmeticArgument -> m ()
+subs rd rn (Immediate imm)  = subsImmediate rd rn 0 imm
+subs rd rn (ImmediateN imm) = subsImmediate rd rn 1 imm
+subs _ _ _ = undefined
 
 -- | C6.2.317 SVC
 svc :: CodeMonad AArch64 m => Word16 -> m ()
