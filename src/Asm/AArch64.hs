@@ -32,6 +32,7 @@ module Asm.AArch64
     , add
     , adr
     , Asm.AArch64.and
+    , bcond
     , b
     , cmp
     , csel
@@ -106,6 +107,7 @@ type Word1  = Word32
 type Word6  = Word32
 type Word9  = Word32
 type Word12 = Word32
+type Word19 = Word32
 type Word21 = Word32
 type Word26 = Word32
 
@@ -229,7 +231,13 @@ and :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> BitwiseArgu
 and rd rn (BImmediate n immr imms) = andImmediate rd rn n immr imms
 and _ _ _ = undefined
 
+-- | C6.2.26 B.<cond>
+
+bcond :: CodeMonad AArch64 m => Cond -> Symbol -> m ()
+bcond _ _ = return ()
+
 -- | C6.2.26 B
+
 b_ :: Word26 -> Word32
 b_ imm26 = 0x14000000 .|. imm26'
     where

@@ -1,11 +1,13 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecursiveDo #-}
 
 module Code.AArch64.TestBss (testBss) where
 
 import Prelude as P hiding (and)
 
 import Control.Monad
+import Control.Monad.Fix
 import Data.Word
 
 import Asm.Asm
@@ -15,13 +17,13 @@ import Asm.AArch64
 sysExit :: Word16
 sysExit = 93
 
-charToInt :: CodeMonad AArch64 m => m ()
-charToInt = do
+charToInt :: (CodeMonad AArch64 m, MonadFix m) => m ()
+charToInt = mdo
     and w0 w0 $ BImmediate 0 0 7 -- #0xff
     sub w1 w0 $ Immediate 0x61
     and w1 w1 $ BImmediate 0 0 7 -- #0xff
     cmp w1 $ Immediate 0x5
-    -- b.ls 30 <char_to_int+0x30>  // b.plast
+    bcond LS l
     sub w1 w0 $ Immediate 0x41
     sub w2 w0 $ Immediate 0x37
     and w1 w1 $ BImmediate 0 0 7 -- #0xff
@@ -29,6 +31,7 @@ charToInt = do
     cmp w1 $ Immediate 0x5
     csel w0 w0 w2 HI
     ret x30
+    l <- label
     sub w0 w0 $ Immediate 0x57
     ret x30
 
@@ -44,7 +47,7 @@ intToChar = do
     csel w0 w1 w0 HI
     ret x30
 
-testBss :: CodeMonad AArch64 m => m ()
+testBss :: (CodeMonad AArch64 m, MonadFix m) => m ()
 testBss = do
 
     intToChar
