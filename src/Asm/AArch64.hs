@@ -253,8 +253,13 @@ cmp rn arg = subs (mkReg rn 31) rn arg
 
 -- | C6.2.69 CSEL
 
-csel :: CodeMonad AArch64 m => Register w -> Register w -> Register w -> Cond -> m () -- FIXME
-csel _ _ _ _ = return ()
+csel :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Register w -> Cond -> m () -- FIXME
+csel rd@(R d) (R n) (R m) cond = instr $  (b64 rd `shift` 31)
+                                      .|. 0x1a800000
+                                      .|. (m `shift` 16)
+                                      .|. (condToEnc cond `shift` 12)
+                                      .|. (n `shift` 5)
+                                      .|. d
 
 -- | C6.2.190 MOVК
 
