@@ -50,8 +50,8 @@ intToChar = do
 testBss :: (CodeMonad AArch64 m, MonadFix m) => m ()
 testBss = do
 
-    intToChar
     charToInt
+    intToChar
 
     void $ labelExtern "_start"
 

@@ -233,8 +233,16 @@ and _ _ _ = undefined
 
 -- | C6.2.26 B.<cond>
 
-bcond :: CodeMonad AArch64 m => Cond -> Symbol -> m ()
-bcond _ _ = return ()
+bcond_ :: Cond -> Word19 -> Word32
+bcond_ cond imm19 = 0x54000000 .|. (imm19 `shift` 5)
+                               .|. condToEnc cond
+
+class ArgBCond w where
+    bcond :: CodeMonad AArch64 m => Cond -> w -> m ()
+instance ArgBCond Word19 where
+    bcond cond imm19 = instr $ bcond_ cond imm19
+instance ArgBCond Symbol where
+    bcond cond l = instrReloc (bcond_ cond 0) l R_AARCH64_CONDBR19
 
 -- | C6.2.26 B
 
@@ -362,6 +370,13 @@ mkRelocationAArch64 R_AARCH64_JUMP26 p@(SectionOffset p') (SectionOffset s) a = 
     imm <- $maybeAddContext "imm does not fit" $ fitN 26 x
     let
         f w = (w .&. 0xfc000000) .|. imm
+    return $ modifyWord32LE p f
+mkRelocationAArch64 R_AARCH64_CONDBR19 p@(SectionOffset p') (SectionOffset s) a = do
+    let
+        x = (s + a - p') `shiftR` 2
+    imm <- $maybeAddContext "imm does not fit" $ fitN 19 x
+    let
+        f w = (w .&. 0xff00001f) .|. (imm `shift` 5)
     return $ modifyWord32LE p f
 mkRelocationAArch64 R_AARCH64_ADR_PREL_LO21 p@(SectionOffset p') (SectionOffset s) a = do
     let
