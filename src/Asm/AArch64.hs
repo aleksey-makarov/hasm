@@ -23,6 +23,7 @@ module Asm.AArch64
     , w0, w1
 
     , ArithmeticArgument (..)
+    , BitwiseArgument (..)
     , Cond (..)
     , MovData (..)
 
@@ -99,6 +100,8 @@ b64 _ = case sing @w of
 mkReg :: Register w -> Word32 -> Register w
 mkReg _ n = R n
 
+type Word1  = Word32
+type Word6  = Word32
 type Word9  = Word32
 type Word12 = Word32
 type Word21 = Word32
@@ -120,6 +123,14 @@ data ArithmeticArgument
     | Immediate Word12
     | ImmediateN Word12
     | ShiftedRegister
+
+data BitwiseArgument
+    = BImmediate
+        { biN    :: Word1
+        , biImmr :: Word6
+        , biImms :: Word6
+        }
+    | BShiftedRegister
 
 data Cond = EQ -- Equal
           | NE -- Not Equal
@@ -169,11 +180,11 @@ data MovData = LSL0  Word16
 
 addImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word32 -> Word12 -> m ()
 addImmediate rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
-                                           .|. 0x11000000
-                                           .|. (sh `shift` 22)
-                                           .|. (imm `shift` 10)
-                                           .|. (n `shift` 5)
-                                           .|. d
+                                          .|. 0x11000000
+                                          .|. (sh `shift` 22)
+                                          .|. (imm `shift` 10)
+                                          .|. (n `shift` 5)
+                                          .|. d
 
 add :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> ArithmeticArgument -> m ()
 add rd rn (Immediate imm)  = addImmediate rd rn 0 imm
@@ -203,8 +214,18 @@ instance ArgADR Symbol where
 
 -- | C6.2.12 AND
 
-and :: CodeMonad AArch64 m => Register w -> Register w -> Word21 -> m () -- FIXME
-and _ _ _ = return ()
+andImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word1 -> Word6 -> Word6 -> m ()
+andImmediate rd@(R d) (R n) nBit immr imms = instr $  (b64 rd `shift` 31)
+                                                  .|. 0x12000000
+                                                  .|. (nBit `shift` 22)
+                                                  .|. (immr `shift` 16)
+                                                  .|. (imms `shift` 10)
+                                                  .|. (n `shift` 5)
+                                                  .|. d
+
+and :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> BitwiseArgument -> m ()
+and rd rn (BImmediate n immr imms) = andImmediate rd rn n immr imms
+and _ _ _ = undefined
 
 -- | C6.2.26 B
 b_ :: Word26 -> Word32
