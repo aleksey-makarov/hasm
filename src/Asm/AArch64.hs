@@ -20,7 +20,7 @@ module Asm.AArch64
     -- * Registers
     , Register
     , x0, x1, x2, x8, x30
-    , w0, w1
+    , w0, w1, w2
 
     , ArithmeticArgument (..)
     , BitwiseArgument (..)
@@ -40,6 +40,7 @@ module Asm.AArch64
     , movn
     , movz
     , ret
+    , sub
     , subs
     , svc
     ) where
@@ -87,9 +88,10 @@ x2  = R 2
 x8  = R 8
 x30 = R 30
 
-w0, w1 :: Register 'W
+w0, w1, w2 :: Register 'W
 w0 = R 0
 w1 = R 1
+w2 = R 2
 
 b64 :: forall w . SingI w => Register w -> Word32
 b64 _ = case sing @w of
@@ -312,19 +314,27 @@ ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
 ret :: CodeMonad AArch64 m => Register 'X -> m ()
 ret (R n) = instr $ 0xd65f0000 .|. (n `shift` 5)
 
+-- | C6.2.308 SUB
+
+subsImmediate :: (CodeMonad AArch64 m, SingI w) => Word1 -> Register w -> Register w -> Word32 -> Word12 -> m ()
+subsImmediate s rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
+                                             .|. 0x51000000
+                                             .|. (s `shift` 29)
+                                             .|. (sh `shift` 22)
+                                             .|. (imm `shift` 10)
+                                             .|. (n `shift` 5)
+                                             .|. d
+
+sub :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> ArithmeticArgument -> m ()
+sub rd rn (Immediate imm)  = subsImmediate 0 rd rn 0 imm
+sub rd rn (ImmediateN imm) = subsImmediate 0 rd rn 1 imm
+sub _ _ _ = undefined
+
 -- | C6.2.315 SUBS
 
-subsImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word32 -> Word12 -> m ()
-subsImmediate rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
-                                           .|. 0x71000000
-                                           .|. (sh `shift` 22)
-                                           .|. (imm `shift` 10)
-                                           .|. (n `shift` 5)
-                                           .|. d
-
 subs :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> ArithmeticArgument -> m ()
-subs rd rn (Immediate imm)  = subsImmediate rd rn 0 imm
-subs rd rn (ImmediateN imm) = subsImmediate rd rn 1 imm
+subs rd rn (Immediate imm)  = subsImmediate 1 rd rn 0 imm
+subs rd rn (ImmediateN imm) = subsImmediate 1 rd rn 1 imm
 subs _ _ _ = undefined
 
 -- | C6.2.317 SVC

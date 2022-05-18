@@ -15,6 +15,23 @@ import Asm.AArch64
 sysExit :: Word16
 sysExit = 93
 
+charToInt :: CodeMonad AArch64 m => m ()
+charToInt = do
+    and w0 w0 $ BImmediate 0 0 7 -- #0xff
+    sub w1 w0 $ Immediate 0x61
+    and w1 w1 $ BImmediate 0 0 7 -- #0xff
+    cmp w1 $ Immediate 0x5
+    -- b.ls 30 <char_to_int+0x30>  // b.plast
+    sub w1 w0 $ Immediate 0x41
+    sub w2 w0 $ Immediate 0x37
+    and w1 w1 $ BImmediate 0 0 7 -- #0xff
+    sub w0 w0 $ Immediate 0x30
+    cmp w1 $ Immediate 0x5
+    csel w0 w0 w2 HI
+    ret x30
+    sub w0 w0 $ Immediate 0x57
+    ret x30
+
 intToChar :: CodeMonad AArch64 m => m ()
 intToChar = do
 
@@ -31,6 +48,7 @@ testBss :: CodeMonad AArch64 m => m ()
 testBss = do
 
     intToChar
+    charToInt
 
     void $ labelExtern "_start"
 
