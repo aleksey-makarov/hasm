@@ -19,8 +19,8 @@ module Asm.AArch64
 
     -- * Registers
     , Register
-    , x0, x1, x2, x8, x30
-    , w0, w1, w2
+    , x0, x1, x2, x8, x20, x21, x30
+    , w0, w1, w2, w19
 
     , ArithmeticArgument (..)
     , BitwiseArgument (..)
@@ -82,17 +82,20 @@ type instance ArchElfClass AArch64 = 'ELFCLASS64
 type Register :: RegisterWidth -> Type
 newtype Register c = R Word32
 
-x0, x1, x2, x8, x30 :: Register 'X
+x0, x1, x2, x8, x20, x21, x30 :: Register 'X
 x0  = R 0
 x1  = R 1
 x2  = R 2
 x8  = R 8
+x20 = R 20
+x21 = R 21
 x30 = R 30
 
-w0, w1, w2 :: Register 'W
-w0 = R 0
-w1 = R 1
-w2 = R 2
+w0, w1, w2, w19 :: Register 'W
+w0  = R 0
+w1  = R 1
+w2  = R 2
+w19 = R 19
 
 b64 :: forall w . SingI w => Register w -> Word32
 b64 _ = case sing @w of

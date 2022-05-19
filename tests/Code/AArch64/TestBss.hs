@@ -47,8 +47,39 @@ intToChar = do
     csel w0 w1 w0 HI
     ret x30
 
+readUInt32 :: CodeMonad AArch64 m => m ()
+readUInt32 = do
+    -- stp x29 x30 [sp, #-48]!
+    movz w2 $ LSL0 0x0
+    -- mov x29 sp
+    -- stp x19 x20 [sp, #16]
+    -- mov x20 x0
+    -- stp x21 x22 [sp, #32]
+    -- mov x22 x1
+    add x21 x0 $ Immediate 0x8
+    l <- label
+    -- ldrb w0 [x20] #1
+    -- lsl w19 w2 #4
+    -- bl 0 <char_to_int>
+    -- add w2 w19 w0
+    -- cmp x20 x21
+    bcond NE l
+    -- ldp x19 x20, [sp, #16]
+    -- str w2 [x22]
+    -- ldp x21 x22 [sp, #32]
+    -- ldp x29 x30 [sp] #48
+    ret x30
+    -- nop
+
 testBss :: (CodeMonad AArch64 m, MonadFix m) => m ()
 testBss = do
+
+    readUInt32
+
+    instr 0
+    instr 0
+    instr 0
+    instr 0
 
     charToInt
     intToChar
