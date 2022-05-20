@@ -107,6 +107,7 @@ mkReg :: Register w -> Word32 -> Register w
 mkReg _ n = R n
 
 type Word1  = Word32
+type Word2  = Word32
 type Word6  = Word32
 type Word9  = Word32
 type Word12 = Word32
@@ -131,14 +132,19 @@ data ArithmeticArgument
     | ImmediateN Word12
     | ShiftedRegister
 
-data BitwiseArgument
+data BitwiseArgument w
     = BImmediate
         { biN    :: Word1
         , biImmr :: Word6
         , biImms :: Word6
         }
     | BShiftedRegister
+        { bsrReg   :: Register w
+        , bsrShift :: Shift
+        , bsrImm   :: Word6
+        }
 
+-- FIXME: use my HT module to generate this (Cond, Shift)
 data Cond = EQ -- Equal
           | NE -- Not Equal
           | HI -- Unsigned Higher
@@ -177,6 +183,17 @@ condToEnc MI = 0b0100
 condToEnc PL = 0b0101
 condToEnc AL = 0b1110
 condToEnc NV = 0b1111
+
+data Shift = LSL
+           | LSR
+           | ASR
+           | ROR
+
+shiftToEnc :: Shift -> Word32
+shiftToEnc LSL = 0b00
+shiftToEnc LSR = 0b01
+shiftToEnc ASR = 0b10
+shiftToEnc ROR = 0b11
 
 data MovData = LSL0  Word16
              | LSL16 Word16
@@ -230,7 +247,7 @@ andImmediate rd@(R d) (R n) nBit immr imms = instr $  (b64 rd `shift` 31)
                                                   .|. (n `shift` 5)
                                                   .|. d
 
-and :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> BitwiseArgument -> m ()
+and :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> BitwiseArgument w -> m ()
 and rd rn (BImmediate n immr imms) = andImmediate rd rn n immr imms
 and _ _ _ = undefined
 
@@ -240,8 +257,8 @@ bcond_ :: Cond -> Word19 -> Word32
 bcond_ cond imm19 = 0x54000000 .|. (imm19 `shift` 5)
                                .|. condToEnc cond
 
-class ArgBCond w where
-    bcond :: CodeMonad AArch64 m => Cond -> w -> m ()
+class ArgBCond a where
+    bcond :: CodeMonad AArch64 m => Cond -> a -> m ()
 instance ArgBCond Word19 where
     bcond cond imm19 = instr $ bcond_ cond imm19
 instance ArgBCond Symbol where
@@ -327,6 +344,30 @@ ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
 --   | o .&. 0x3 /= 0    = $chainedError $ "offset is not aligned: " ++ show o
 --   | not $ isBitN 11 o = $chainedError "offset is too big"
 --   | otherwise         = return $ fromIntegral ((o `shiftR` 2) .&. mask 9)
+
+-- | C6.2.206 ORR (shifted register)
+
+orrImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word1 -> Word6 -> Word6 -> m ()
+orrImmediate rd@(R d) (R n) nBit immr imms = instr $  (b64 rd `shift` 31)
+                                                  .|. 0x32000000
+                                                  .|. (nBit `shift` 22)
+                                                  .|. (immr `shift` 16)
+                                                  .|. (imms `shift` 10)
+                                                  .|. (n `shift` 5)
+                                                  .|. d
+
+orrShiftedRegister :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Register w -> Shift -> Word6 -> m ()
+orrShiftedRegister rd@(R d) (R n) (R m) sht imm6 = instr $  (b64 rd `shift` 31)
+                                                        .|. 0x2a000000
+                                                        .|. (shiftToEnc sht `shift` 22)
+                                                        .|. (m `shift` 16)
+                                                        .|. (imm6 `shift` 10)
+                                                        .|. (n `shift` 5)
+                                                        .|. d
+
+orr :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> BitwiseArgument w -> m ()
+orr rd rn (BImmediate n immr imms) = orrImmediate rd rn n immr imms
+orr rd rn (BShiftedRegister rm sht imm6) = orrShiftedRegister rd rn rm sht imm6
 
 -- | C6.2.219 RET
 
