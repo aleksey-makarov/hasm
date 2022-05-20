@@ -53,9 +53,9 @@ readUInt32 = do
     movz w2 $ LSL0 0x0
     -- mov x29 sp
     -- stp x19 x20 [sp, #16]
-    -- mov x20 x0
+    mov x20 x0
     -- stp x21 x22 [sp, #32]
-    -- mov x22 x1
+    mov x22 x1
     add x21 x0 $ Immediate 0x8
     l <- label
     -- ldrb w0 [x20] #1
