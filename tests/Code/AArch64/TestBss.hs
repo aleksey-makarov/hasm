@@ -51,7 +51,7 @@ readUInt32 :: CodeMonad AArch64 m => m ()
 readUInt32 = do
     -- stp x29 x30 [sp, #-48]!
     movz w2 $ LSL0 0x0
-    -- mov x29 sp
+    movSP x29 sp
     -- stp x19 x20 [sp, #16]
     mov x20 x0
     -- stp x21 x22 [sp, #32]

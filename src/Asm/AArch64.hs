@@ -40,6 +40,7 @@ module Asm.AArch64
     , cmp
     , csel
     , ldr
+    , movSP
     , mov
     , movk
     , movn
@@ -86,13 +87,7 @@ type instance ArchElfClass AArch64 = 'ELFCLASS64
 type Register :: RegisterWidth -> Type
 newtype Register c = R Word32
 
-type SP :: RegisterWidth -> Type
-data SP w = SP
-
-sp :: SP 'X
-sp = sp
-
-x0, x1, x2, x8, x20, x21, x22, x29, x30 :: Register 'X
+x0, x1, x2, x8, x20, x21, x22, x29, x30, sp :: Register 'X
 x0  = R 0
 x1  = R 1
 x2  = R 2
@@ -102,6 +97,7 @@ x21 = R 21
 x22 = R 22
 x29 = R 29
 x30 = R 30
+sp  = R 31
 
 w0, w1, w2, w19 :: Register 'W
 w0  = R 0
@@ -310,17 +306,18 @@ csel rd@(R d) (R n) (R m) cond = instr $  (b64 rd `shift` 31)
                                       .|. (n `shift` 5)
                                       .|. d
 
+-- | C6.2.185 MOV (to/from SP)
+
+movSP :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> m ()
+movSP rd rn = add rd rn $ Immediate 0
+
 -- | C6.2.187 MOV
 
-class ArgMov (a :: RegisterWidth -> Type) (b :: RegisterWidth -> Type) where
-    mov :: (CodeMonad AArch64 m, SingI w) => a w -> b w -> m ()
-instance ArgMov Register SP where
-    mov _rd _ = undefined
-instance ArgMov SP Register where
-    mov _ _rm = undefined
-instance ArgMov Register Register where
+class ArgMov a where
+    mov :: (CodeMonad AArch64 m, SingI w) => Register w -> a w -> m ()
+instance ArgMov Register where
     mov rd rm = orrShiftedRegister rd (mkReg 31) rm LSL 0
-instance ArgMov Register BitwiseArgument where
+instance ArgMov BitwiseArgument where
     mov rd (BImmediate n immr imms) = orrImmediate rd (mkReg 31) n immr imms
     mov rd (BShiftedRegister rm sht imm6) = orrShiftedRegister rd (mkReg 31) rm sht imm6
 
