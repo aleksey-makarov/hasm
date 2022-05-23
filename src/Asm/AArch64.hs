@@ -44,6 +44,7 @@ module Asm.AArch64
     , cmp
     , csel
     , ldr
+    , lsl
     , movSP
     , mov
     , movk
@@ -70,7 +71,7 @@ import Data.Singletons.TH
 import Data.Word
 
 import Asm.Asm
-import Asm.Data
+import Asm.Data as AD
 import Asm.Relocation
 
 $(singletons [d| data RegisterWidth = X | W |])
@@ -292,6 +293,7 @@ addsShiftedRegister s rd@(R d) (R n) (R m) sht imm6 = instr $  (b64 rd `shift` 3
                                                            .|. d
 
 -- | C6.2.10 ADR
+
 adr_ :: Register 'X -> Word21 -> Word32
 adr_ (R n) imm21 = 0x10000000 .|. imm .|. n
     where
@@ -385,6 +387,15 @@ csel rd@(R d) (R n) (R m) cond = instr $  (b64 rd `shift` 31)
                                       .|. (condToEnc cond `shift` 12)
                                       .|. (n `shift` 5)
                                       .|. d
+
+-- | C6.2.178 LSL (immediate)
+
+lsl :: forall m w . (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word6 -> m ()
+lsl rd rn sht = ubfm rd rn bp
+    where
+        bp = case sing @w of
+            SW -> BitPattern 0 (negate sht .&. AD.mask 5) (31 - sht)
+            SX -> BitPattern 1 (negate sht .&. AD.mask 6) (63 - sht)
 
 -- | C6.2.185 MOV (to/from SP)
 
@@ -526,6 +537,18 @@ subsShiftedRegister s rd@(R d) (R n) (R m) sht imm6 = instr $  (b64 rd `shift` 3
 -- | C6.2.317 SVC
 svc :: CodeMonad AArch64 m => Word16 -> m ()
 svc imm = instr $ 0xd4000001 .|. (fromIntegral imm `shift` 5)
+
+-- | C6.2.333 UBFM
+
+-- FIXME: should be true: b64 rd == bpN
+ubfm :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> BitPattern w -> m ()
+ubfm rd@(R d) (R n) BitPattern { .. } = instr $  (b64 rd `shift` 31)
+                                             .|. 0x53000000
+                                             .|. (bpN    `shift` 22)
+                                             .|. (bpImmr `shift` 16)
+                                             .|. (bpImms `shift` 10)
+                                             .|. (n      `shift`  5)
+                                             .|. d
 
 mkRelocationAArch64 ::
                  MonadThrow m =>

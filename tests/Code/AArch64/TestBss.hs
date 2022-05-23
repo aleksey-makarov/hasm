@@ -59,7 +59,7 @@ readUInt32 = do
     add x21 x0 $ Immediate 0x8
     l <- label
     instr 0 -- ldrb w0 [x20] #1
-    instr 0 -- lsl w19 w2 #4
+    lsl w19 w2 4
     instr 0 -- bl 0 <char_to_int>
     add w2 w19 w0
     cmp x20 x21
