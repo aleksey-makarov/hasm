@@ -41,6 +41,7 @@ module Asm.AArch64
     , Asm.AArch64.and
     , bcond
     , b
+    , bl
     , cmp
     , csel
     , ldr
@@ -352,17 +353,17 @@ instance ArgBCond Symbol where
 
 -- | C6.2.26 B
 
-b_ :: Word26 -> Word32
-b_ imm26 = 0x14000000 .|. imm26'
-    where
-        imm26' = fixWord 26 imm26 -- FIXME: Word26 should keep verified integer
+b_ :: Word1 -> Word26 -> Word32
+b_ op imm26 = (op `shift` 31) .|. 0x14000000 .|. imm26
 
 class ArgB w where
-    b :: CodeMonad AArch64 m => w -> m ()
+    b, bl :: CodeMonad AArch64 m => w -> m ()
 instance ArgB Word26 where
-    b imm26 = instr $ b_ imm26
+    b  imm26 = instr $ b_ 0 imm26
+    bl imm26 = instr $ b_ 1 imm26
 instance ArgB Symbol where
-    b l = instrReloc (b_ 0) l R_AARCH64_JUMP26
+    b  l = instrReloc (b_ 0 0) l R_AARCH64_JUMP26
+    bl l = instrReloc (b_ 1 0) l R_AARCH64_JUMP26
 
 -- offsetToImm26 :: MonadThrow m => SectionOffset -> m Word26
 -- offsetToImm26 (SectionOffset o)

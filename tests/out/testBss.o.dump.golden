@@ -18,7 +18,7 @@ section 1 ".text" {
     Link:      0x00000000
     Data:      00 00 00 00 02 00 80 52 fd 03 00 91 00 00 00 00 # .......R........
                f4 03 00 aa 00 00 00 00 f6 03 01 aa 15 20 00 91 # ............. ..
-               00 00 00 00 53 6c 1c 53 00 00 00 00 62 02 00 0b # ....Sl.S....b...
+               00 00 00 00 53 6c 1c 53 0e 00 00 94 62 02 00 0b # ....Sl.S....b...
                9f 02 15 eb 61 ff ff 54 00 00 00 00 00 00 00 00 # ....a..T........
                00 00 00 00 00 00 00 00 c0 03 5f d6 1f 20 03 d5 # .........._.. ..
                11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 # ................
@@ -37,7 +37,7 @@ symbol table section 4 ".symtab" {
     Addr:      0x0000000000000000
     AddrAlign: 0x0000000000000008
     EntSize:   0x0000000000000018
-    Info:      0x00000003
+    Info:      0x00000004
     Link:      0x00000003
     Data:      
         symbol "" {
@@ -52,6 +52,13 @@ symbol table section 4 ".symtab" {
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
             Value: 0x0000000000000020
+            Size:  0x0000000000000000
+        }
+        symbol "$text@96" {
+            Bind:  STB_Local
+            Type:  STT_NoType
+            ShNdx: SHN_EXT 1
+            Value: 0x0000000000000060
             Size:  0x0000000000000000
         }
         symbol "$text@144" {
@@ -78,6 +85,7 @@ section 3 ".strtab" {
     Info:      0x00000000
     Link:      0x00000000
     Data:      00 24 74 65 78 74 40 31 34 34 00 24 74 65 78 74 # .$text@144.$text
-               40 33 32 00 5f 73 74 61 72 74 00                # @32._start.
+               40 39 36 00 24 74 65 78 74 40 33 32 00 5f 73 74 # @96.$text@32._st
+               61 72 74 00                                     # art.
 }
 section table
