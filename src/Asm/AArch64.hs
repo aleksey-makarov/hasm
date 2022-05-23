@@ -258,9 +258,14 @@ instance ArgArithm ExtendedRegister where
     subs rd rn (ExtendedRegister m extend amount) = subsExtendedRegister 1 rd rn m extend amount
 
 instance ArgArithm ShiftedRegister where
-    add = undefined
+    add  rd rn ShiftedRegister { .. } = addsShiftedRegister 0 rd rn srReg srShift srImm
     sub = undefined
     subs rd rn ShiftedRegister { .. } = subsShiftedRegister 1 rd rn srReg srShift srImm
+
+instance ArgArithm Register where
+    add  rd rn rm = add rd rn $ ShiftedRegister rm LSL 0
+    sub  = undefined
+    subs = undefined
 
 addImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word32 -> Word12 -> m ()
 addImmediate rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
@@ -269,6 +274,22 @@ addImmediate rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
                                           .|. (imm `shift` 10)
                                           .|. (n `shift` 5)
                                           .|. d
+
+addsShiftedRegister :: (CodeMonad AArch64 m, SingI w) =>
+                                                Word1 ->
+                                           Register w ->
+                                           Register w ->
+                                           Register w ->
+                                                Shift ->
+                                                Word6 -> m ()
+addsShiftedRegister s rd@(R d) (R n) (R m) sht imm6 = instr $  (b64 rd `shift` 31)
+                                                           .|. 0x0b000000
+                                                           .|. (s `shift` 29)
+                                                           .|. (shiftToEnc sht `shift` 22)
+                                                           .|. (m `shift` 16)
+                                                           .|. (imm6 `shift` 10)
+                                                           .|. (n `shift` 5)
+                                                           .|. d
 
 -- | C6.2.10 ADR
 adr_ :: Register 'X -> Word21 -> Word32

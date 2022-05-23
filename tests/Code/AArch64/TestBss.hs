@@ -61,7 +61,7 @@ readUInt32 = do
     instr 0 -- ldrb w0 [x20] #1
     instr 0 -- lsl w19 w2 #4
     instr 0 -- bl 0 <char_to_int>
-    instr 0 -- add w2 w19 w0
+    add w2 w19 w0
     cmp x20 x21
     bcond NE l
     instr 0 -- ldp x19 x20, [sp, #16]
