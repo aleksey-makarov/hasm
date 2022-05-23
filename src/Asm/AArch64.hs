@@ -50,6 +50,7 @@ module Asm.AArch64
     , movk
     , movn
     , movz
+    , nop
     , ret
     , sub
     , subs
@@ -388,6 +389,21 @@ csel rd@(R d) (R n) (R m) cond = instr $  (b64 rd `shift` 31)
                                       .|. (n `shift` 5)
                                       .|. d
 
+-- | C6.2.132 LDR (literal)
+ldr :: (CodeMonad AArch64 m, SingI w) => Register w -> Word9 -> m ()
+ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
+                        .|. 0x18000000
+                        .|. (imm9' `shift` 5)
+                        .|. n
+    where
+        imm9' = fixWord 9 imm9 -- FIXME: Word9 should keep verified integer
+
+-- offsetToImm9 :: MonadThrow m => SectionOffset -> m Word9
+-- offsetToImm9 (SectionOffset o)
+--   | o .&. 0x3 /= 0    = $chainedError $ "offset is not aligned: " ++ show o
+--   | not $ isBitN 11 o = $chainedError "offset is too big"
+--   | otherwise         = return $ fromIntegral ((o `shiftR` 2) .&. mask 9)
+
 -- | C6.2.178 LSL (immediate)
 
 lsl :: forall m w . (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word6 -> m ()
@@ -444,20 +460,10 @@ movz r@(R n) d = instr $ (b64 r `shift` 31)
                       .|. movDataToInstrBits d
                       .|. n
 
--- | C6.2.132 LDR (literal)
-ldr :: (CodeMonad AArch64 m, SingI w) => Register w -> Word9 -> m ()
-ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
-                        .|. 0x18000000
-                        .|. (imm9' `shift` 5)
-                        .|. n
-    where
-        imm9' = fixWord 9 imm9 -- FIXME: Word9 should keep verified integer
+-- | C6.2.203 NOP
 
--- offsetToImm9 :: MonadThrow m => SectionOffset -> m Word9
--- offsetToImm9 (SectionOffset o)
---   | o .&. 0x3 /= 0    = $chainedError $ "offset is not aligned: " ++ show o
---   | not $ isBitN 11 o = $chainedError "offset is too big"
---   | otherwise         = return $ fromIntegral ((o `shiftR` 2) .&. mask 9)
+nop :: CodeMonad AArch64 m => m ()
+nop = instr $ 0xd503201f
 
 -- | C6.2.206 ORR (shifted register)
 

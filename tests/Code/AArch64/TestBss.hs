@@ -69,7 +69,7 @@ readUInt32 = do
     instr 0 -- ldp x21 x22 [sp, #32]
     instr 0 -- ldp x29 x30 [sp] #48
     ret x30
-    instr 0 -- nop
+    nop
 
 testBss :: (CodeMonad AArch64 m, MonadFix m) => m ()
 testBss = do
