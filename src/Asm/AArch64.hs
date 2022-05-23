@@ -6,6 +6,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -151,16 +152,16 @@ data Immediate (w :: RegisterWidth)
 
 data BitPattern (w :: RegisterWidth)
     = BitPattern
-        { biN    :: Word1
-        , biImmr :: Word6
-        , biImms :: Word6
+        { bpN    :: Word1
+        , bpImmr :: Word6
+        , bpImms :: Word6
         }
 
 data ShiftedRegister (w :: RegisterWidth)
     = ShiftedRegister
-        { bsrReg   :: Register w
-        , bsrShift :: Shift
-        , bsrImm   :: Word6
+        { srReg   :: Register w
+        , srShift :: Shift
+        , srImm   :: Word6
         }
 
 -- FIXME: use my HT module to generate this (Cond, Shift)
@@ -244,10 +245,10 @@ class ArgArithm a where
     add, sub, subs :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> a w -> m ()
 
 instance ArgArithm Immediate where
-    add rd rn (Immediate imm)  = addImmediate rd rn 0 imm
-    add rd rn (ImmediateN imm) = addImmediate rd rn 1 imm
-    sub rd rn (Immediate imm)  = subsImmediate 0 rd rn 0 imm
-    sub rd rn (ImmediateN imm) = subsImmediate 0 rd rn 1 imm
+    add  rd rn (Immediate imm)  = addImmediate    rd rn 0 imm
+    add  rd rn (ImmediateN imm) = addImmediate    rd rn 1 imm
+    sub  rd rn (Immediate imm)  = subsImmediate 0 rd rn 0 imm
+    sub  rd rn (ImmediateN imm) = subsImmediate 0 rd rn 1 imm
     subs rd rn (Immediate imm)  = subsImmediate 1 rd rn 0 imm
     subs rd rn (ImmediateN imm) = subsImmediate 1 rd rn 1 imm
 
@@ -255,6 +256,11 @@ instance ArgArithm ExtendedRegister where
     add = undefined
     sub rd rn (ExtendedRegister m extend amount) = subsExtendedRegister 0 rd rn m extend amount
     subs rd rn (ExtendedRegister m extend amount) = subsExtendedRegister 1 rd rn m extend amount
+
+instance ArgArithm ShiftedRegister where
+    add = undefined
+    sub = undefined
+    subs rd rn ShiftedRegister { .. } = subsShiftedRegister 1 rd rn srReg srShift srImm
 
 addImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word32 -> Word12 -> m ()
 addImmediate rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
@@ -344,8 +350,8 @@ instance ArgB Symbol where
 
 class ArgArithm1 a where
     cmp :: (CodeMonad AArch64 m, SingI w) => Register w -> a w -> m ()
--- instance ArgCmp (Register w) where
---     cmp rd rm = cmp rd $ Immediate 0
+instance ArgArithm1 Register where
+    cmp rn rm = subs (R 31) rn $ ShiftedRegister rm LSL 0
 instance ArgArithm1 Immediate where
     cmp rn arg = subs (mkReg 31) rn arg
 
@@ -448,7 +454,12 @@ ret (R n) = instr $ 0xd65f0000 .|. (n `shift` 5)
 
 -- | C6.2.308 SUB
 
-subsImmediate :: (CodeMonad AArch64 m, SingI w) => Word1 -> Register w -> Register w -> Word32 -> Word12 -> m ()
+subsImmediate :: (CodeMonad AArch64 m, SingI w) =>
+                                          Word1 ->
+                                     Register w ->
+                                     Register w ->
+                                         Word32 ->
+                                         Word12 -> m ()
 subsImmediate s rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
                                              .|. 0x51000000
                                              .|. (s `shift` 29)
@@ -465,13 +476,29 @@ subsExtendedRegister :: (CodeMonad AArch64 m, SingI w) =>
                                                 Extend ->
                                                  Word3 -> m ()
 subsExtendedRegister s rd@(R d) (R n) m extend amount = instr $  (b64 rd `shift` 31)
-                                                             .|. 0x6b000000
+                                                             .|. 0x6b200000
                                                              .|. (s `shift` 29)
                                                              .|. (m `shift` 16)
                                                              .|. (extendToEnc extend `shift` 13)
                                                              .|. (amount `shift` 10)
                                                              .|. (n `shift` 5)
                                                              .|. d
+
+subsShiftedRegister :: (CodeMonad AArch64 m, SingI w) =>
+                                                Word1 ->
+                                           Register w ->
+                                           Register w ->
+                                           Register w ->
+                                                Shift ->
+                                                Word6 -> m ()
+subsShiftedRegister s rd@(R d) (R n) (R m) sht imm6 = instr $  (b64 rd `shift` 31)
+                                                           .|. 0x6b000000
+                                                           .|. (s `shift` 29)
+                                                           .|. (shiftToEnc sht `shift` 22)
+                                                           .|. (m `shift` 16)
+                                                           .|. (imm6 `shift` 10)
+                                                           .|. (n `shift` 5)
+                                                           .|. d
 
 -- | C6.2.315 SUBS
 
@@ -489,21 +516,21 @@ mkRelocationAArch64 ::
 mkRelocationAArch64 R_AARCH64_JUMP26 p@(SectionOffset p') (SectionOffset s) a = do
     let
         x = (s + a - p') `shiftR` 2
-    imm <- $maybeAddContext "imm does not fit" $ fitN 26 x
+    imm <- $eitherAddContext' $ fitN 26 x
     let
         f w = (w .&. 0xfc000000) .|. imm
     return $ modifyWord32LE p f
 mkRelocationAArch64 R_AARCH64_CONDBR19 p@(SectionOffset p') (SectionOffset s) a = do
     let
         x = (s + a - p') `shiftR` 2
-    imm <- $maybeAddContext "imm does not fit" $ fitN 19 x
+    imm <- $eitherAddContext' $ fitN 19 x
     let
         f w = (w .&. 0xff00001f) .|. (imm `shift` 5)
     return $ modifyWord32LE p f
 mkRelocationAArch64 R_AARCH64_ADR_PREL_LO21 p@(SectionOffset p') (SectionOffset s) a = do
     let
         x = (s + a - p')
-    imm21 <- $maybeAddContext "imm does not fit" $ fitN 21 x
+    imm21 <- $eitherAddContext' $ fitN 21 x
     let
         immlo = imm21 .&. 3
         immhi = imm21 `shiftR` 2

@@ -100,18 +100,6 @@ testExe name code maybeExpectedString =
 --------------------------------------------------
 --
 
--- padLeadingZeros :: Int -> String -> String
--- padLeadingZeros n s | P.length s > n = error "padLeadingZeros args"
---                     | otherwise = P.replicate (n - P.length s) '0' ++ s
---
--- printWord32 :: Word32 -> String
--- printWord32 n = padLeadingZeros 8 $ showHex n ""
---
--- readWord32 :: String -> Word32
--- readWord32 s = case readHex s of
---     [(res, "")] -> res
---     _ -> error "readHex error"
---
 -- prop_sum :: (Word32, Word32) -> Property
 -- prop_sum (aw, bw) = monadicIO $ do
 --     retString <- run $ runExe (".." </> "test_bss.gcc") (printWord32 aw ++ " " ++ printWord32 bw)
