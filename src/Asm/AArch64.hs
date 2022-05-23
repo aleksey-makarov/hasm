@@ -24,8 +24,11 @@ module Asm.AArch64
     , x0, x1, x2, x8, x20, x21, x22, x29, x30, sp
     , w0, w1, w2, w19
 
-    , ArithmeticArgument (..)
-    , BitwiseArgument (..)
+    , ExtendedRegister (..)
+    , Immediate (..)
+    , BitPattern (..)
+    , ShiftedRegister (..)
+
     , Cond (..)
     , MovData (..)
     , Shift (..)
@@ -115,6 +118,8 @@ mkReg n = R n
 
 type Word1  = Word32
 type Word2  = Word32
+type Word3  = Word32
+type Word5  = Word32
 type Word6  = Word32
 type Word9  = Word32
 type Word12 = Word32
@@ -133,19 +138,26 @@ instrReloc w l r = emitReloc (Instruction w) l r
 --     a <- offset
 --     void $ emit (Instruction w) (Just $ LabelRelocation l r a)
 
-data ArithmeticArgument
+data ExtendedRegister (w :: RegisterWidth)
     = ExtendedRegister
-    | Immediate Word12
-    | ImmediateN Word12
-    | ShiftedRegister
+        { erReg    :: Word5
+        , erExtend :: Extend
+        , erAmount :: Word3
+        }
 
-data BitwiseArgument w
-    = BImmediate
+data Immediate (w :: RegisterWidth)
+    = Immediate Word12
+    | ImmediateN Word12
+
+data BitPattern (w :: RegisterWidth)
+    = BitPattern
         { biN    :: Word1
         , biImmr :: Word6
         , biImms :: Word6
         }
-    | BShiftedRegister
+
+data ShiftedRegister (w :: RegisterWidth)
+    = ShiftedRegister
         { bsrReg   :: Register w
         , bsrShift :: Shift
         , bsrImm   :: Word6
@@ -202,12 +214,47 @@ shiftToEnc LSR = 0b01
 shiftToEnc ASR = 0b10
 shiftToEnc ROR = 0b11
 
+data Extend = UXTB
+            | UXTH
+            | UXTW
+            | UXTX
+            | SXTB
+            | SXTH
+            | SXTW
+            | SXTX
+
+extendToEnc :: Extend -> Word32
+extendToEnc UXTB = 0b000
+extendToEnc UXTH = 0b001
+extendToEnc UXTW = 0b010
+extendToEnc UXTX = 0b011
+extendToEnc SXTB = 0b100
+extendToEnc SXTH = 0b101
+extendToEnc SXTW = 0b110
+extendToEnc SXTX = 0b111
+
 data MovData = LSL0  Word16
              | LSL16 Word16
              | LSL32 Word16
              | LSL48 Word16
 
 -- | C6.2.4 ADD
+
+class ArgArithm a where
+    add, sub, subs :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> a w -> m ()
+
+instance ArgArithm Immediate where
+    add rd rn (Immediate imm)  = addImmediate rd rn 0 imm
+    add rd rn (ImmediateN imm) = addImmediate rd rn 1 imm
+    sub rd rn (Immediate imm)  = subsImmediate 0 rd rn 0 imm
+    sub rd rn (ImmediateN imm) = subsImmediate 0 rd rn 1 imm
+    subs rd rn (Immediate imm)  = subsImmediate 1 rd rn 0 imm
+    subs rd rn (ImmediateN imm) = subsImmediate 1 rd rn 1 imm
+
+instance ArgArithm ExtendedRegister where
+    add = undefined
+    sub rd rn (ExtendedRegister m extend amount) = subsExtendedRegister 0 rd rn m extend amount
+    subs rd rn (ExtendedRegister m extend amount) = subsExtendedRegister 1 rd rn m extend amount
 
 addImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word32 -> Word12 -> m ()
 addImmediate rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
@@ -216,11 +263,6 @@ addImmediate rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
                                           .|. (imm `shift` 10)
                                           .|. (n `shift` 5)
                                           .|. d
-
-add :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> ArithmeticArgument -> m ()
-add rd rn (Immediate imm)  = addImmediate rd rn 0 imm
-add rd rn (ImmediateN imm) = addImmediate rd rn 1 imm
-add _ _ _ = undefined
 
 -- | C6.2.10 ADR
 adr_ :: Register 'X -> Word21 -> Word32
@@ -231,8 +273,8 @@ adr_ (R n) imm21 = 0x10000000 .|. imm .|. n
         immhi = imm21' `shiftR` 2
         imm   = (immhi `shift` 5) .|. (immlo `shift` 29)
 
-class ArgADR w where
-    adr :: CodeMonad AArch64 m => Register 'X -> w -> m ()
+class ArgADR a where
+    adr :: CodeMonad AArch64 m => Register 'X -> a -> m ()
 instance ArgADR Word21 where
     adr r w = instr $ adr_ r w
 instance ArgADR Symbol where
@@ -245,6 +287,17 @@ instance ArgADR Symbol where
 
 -- | C6.2.12 AND
 
+class ArgBitwise a where
+    and, orr :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> a w -> m ()
+
+instance ArgBitwise BitPattern where
+    and rd rn (BitPattern n immr imms) = andImmediate rd rn n immr imms
+    orr rd rn (BitPattern n immr imms) = orrImmediate rd rn n immr imms
+
+instance ArgBitwise ShiftedRegister where
+    and = undefined
+    orr rd rn (ShiftedRegister rm sht imm6) = orrShiftedRegister rd rn rm sht imm6
+
 andImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word1 -> Word6 -> Word6 -> m ()
 andImmediate rd@(R d) (R n) nBit immr imms = instr $  (b64 rd `shift` 31)
                                                   .|. 0x12000000
@@ -253,10 +306,6 @@ andImmediate rd@(R d) (R n) nBit immr imms = instr $  (b64 rd `shift` 31)
                                                   .|. (imms `shift` 10)
                                                   .|. (n `shift` 5)
                                                   .|. d
-
-and :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> BitwiseArgument w -> m ()
-and rd rn (BImmediate n immr imms) = andImmediate rd rn n immr imms
-and _ _ _ = undefined
 
 -- | C6.2.26 B.<cond>
 
@@ -293,8 +342,12 @@ instance ArgB Symbol where
 
 -- | C6.2.61 CMP
 
-cmp :: (CodeMonad AArch64 m, SingI w) => Register w -> ArithmeticArgument -> m () -- FIXME
-cmp rn arg = subs (mkReg 31) rn arg
+class ArgArithm1 a where
+    cmp :: (CodeMonad AArch64 m, SingI w) => Register w -> a w -> m ()
+-- instance ArgCmp (Register w) where
+--     cmp rd rm = cmp rd $ Immediate 0
+instance ArgArithm1 Immediate where
+    cmp rn arg = subs (mkReg 31) rn arg
 
 -- | C6.2.69 CSEL
 
@@ -317,9 +370,10 @@ class ArgMov a where
     mov :: (CodeMonad AArch64 m, SingI w) => Register w -> a w -> m ()
 instance ArgMov Register where
     mov rd rm = orrShiftedRegister rd (mkReg 31) rm LSL 0
-instance ArgMov BitwiseArgument where
-    mov rd (BImmediate n immr imms) = orrImmediate rd (mkReg 31) n immr imms
-    mov rd (BShiftedRegister rm sht imm6) = orrShiftedRegister rd (mkReg 31) rm sht imm6
+instance ArgMov BitPattern where
+    mov rd (BitPattern n immr imms) = orrImmediate rd (mkReg 31) n immr imms
+instance ArgMov ShiftedRegister where
+    mov rd (ShiftedRegister rm sht imm6) = orrShiftedRegister rd (mkReg 31) rm sht imm6
 
 -- | C6.2.190 MOVК
 
@@ -387,10 +441,6 @@ orrShiftedRegister rd@(R d) (R n) (R m) sht imm6 = instr $  (b64 rd `shift` 31)
                                                         .|. (n `shift` 5)
                                                         .|. d
 
-orr :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> BitwiseArgument w -> m ()
-orr rd rn (BImmediate n immr imms) = orrImmediate rd rn n immr imms
-orr rd rn (BShiftedRegister rm sht imm6) = orrShiftedRegister rd rn rm sht imm6
-
 -- | C6.2.219 RET
 
 ret :: CodeMonad AArch64 m => Register 'X -> m ()
@@ -407,17 +457,23 @@ subsImmediate s rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
                                              .|. (n `shift` 5)
                                              .|. d
 
-sub :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> ArithmeticArgument -> m ()
-sub rd rn (Immediate imm)  = subsImmediate 0 rd rn 0 imm
-sub rd rn (ImmediateN imm) = subsImmediate 0 rd rn 1 imm
-sub _ _ _ = undefined
+subsExtendedRegister :: (CodeMonad AArch64 m, SingI w) =>
+                                                 Word1 ->
+                                            Register w ->
+                                            Register w ->
+                                                 Word5 ->
+                                                Extend ->
+                                                 Word3 -> m ()
+subsExtendedRegister s rd@(R d) (R n) m extend amount = instr $  (b64 rd `shift` 31)
+                                                             .|. 0x6b000000
+                                                             .|. (s `shift` 29)
+                                                             .|. (m `shift` 16)
+                                                             .|. (extendToEnc extend `shift` 13)
+                                                             .|. (amount `shift` 10)
+                                                             .|. (n `shift` 5)
+                                                             .|. d
 
 -- | C6.2.315 SUBS
-
-subs :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> ArithmeticArgument -> m ()
-subs rd rn (Immediate imm)  = subsImmediate 1 rd rn 0 imm
-subs rd rn (ImmediateN imm) = subsImmediate 1 rd rn 1 imm
-subs _ _ _ = undefined
 
 -- | C6.2.317 SVC
 svc :: CodeMonad AArch64 m => Word16 -> m ()

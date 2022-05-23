@@ -19,14 +19,14 @@ sysExit = 93
 
 charToInt :: (CodeMonad AArch64 m, MonadFix m) => m ()
 charToInt = mdo
-    and w0 w0 $ BImmediate 0 0 7 -- #0xff
+    and w0 w0 $ BitPattern 0 0 7 -- #0xff
     sub w1 w0 $ Immediate 0x61
-    and w1 w1 $ BImmediate 0 0 7 -- #0xff
+    and w1 w1 $ BitPattern 0 0 7 -- #0xff
     cmp w1 $ Immediate 0x5
     bcond LS l
     sub w1 w0 $ Immediate 0x41
     sub w2 w0 $ Immediate 0x37
-    and w1 w1 $ BImmediate 0 0 7 -- #0xff
+    and w1 w1 $ BitPattern 0 0 7 -- #0xff
     sub w0 w0 $ Immediate 0x30
     cmp w1 $ Immediate 0x5
     csel w0 w0 w2 HI
@@ -38,12 +38,12 @@ charToInt = mdo
 intToChar :: CodeMonad AArch64 m => m ()
 intToChar = do
 
-    and w1 w0 $ BImmediate 0 0 7 -- 0xff
+    and w1 w0 $ BitPattern 0 0 7 -- 0xff
     cmp w0    $ Immediate 0x9
     add w0 w1 $ Immediate 0x30
     add w1 w1 $ Immediate 0x57
-    and w1 w1 $ BImmediate 0 0 7 -- 0xff
-    and w0 w0 $ BImmediate 0 0 7 -- 0xff
+    and w1 w1 $ BitPattern 0 0 7 -- 0xff
+    and w0 w0 $ BitPattern 0 0 7 -- 0xff
     csel w0 w1 w0 HI
     ret x30
 
