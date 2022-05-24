@@ -22,7 +22,7 @@ module Asm.AArch64
 
     -- * Registers
     , Register
-    , x0, x1, x2, x8, x20, x21, x22, x29, x30, sp
+    , x0, x1, x2, x8, x19, x20, x21, x22, x29, x30, sp
     , w0, w1, w2, w19
 
     , ExtendedRegister (..)
@@ -34,6 +34,8 @@ module Asm.AArch64
     , MovData (..)
     , Shift (..)
 
+    , PAddress (..)
+
     -- * Instructions
     , instr
     , add
@@ -44,6 +46,7 @@ module Asm.AArch64
     , bl
     , cmp
     , csel
+    , ldp
     , ldr
     , lsl
     , movSP
@@ -53,6 +56,7 @@ module Asm.AArch64
     , movz
     , nop
     , ret
+    , stp
     , sub
     , subs
     , svc
@@ -94,11 +98,12 @@ type instance ArchElfClass AArch64 = 'ELFCLASS64
 type Register :: RegisterWidth -> Type
 newtype Register c = R Word32
 
-x0, x1, x2, x8, x20, x21, x22, x29, x30, sp :: Register 'X
+x0, x1, x2, x8, x20, x19, x21, x22, x29, x30, sp :: Register 'X
 x0  = R 0
 x1  = R 1
 x2  = R 2
 x8  = R 8
+x19 = R 19
 x20 = R 20
 x21 = R 21
 x22 = R 22
@@ -241,6 +246,20 @@ data MovData = LSL0  Word16
              | LSL16 Word16
              | LSL32 Word16
              | LSL48 Word16
+
+data PAddress
+    = PostIndex
+        { postiR   :: Register 'X
+        , postiImm :: Int32
+        }
+    | PreIndex
+        { preiR   :: Register 'X
+        , preiImm :: Int32
+        }
+    | SignedOffset
+        { soR   :: Register 'X
+        , soImm :: Int32
+        }
 
 -- | C6.2.4 ADD
 
@@ -390,6 +409,29 @@ csel rd@(R d) (R n) (R m) cond = instr $  (b64 rd `shift` 31)
                                       .|. (n `shift` 5)
                                       .|. d
 
+-- | C6.2.129 LDP
+
+-- FIXME: check the `imm` argument
+ldstp :: forall m w . (CodeMonad AArch64 m, SingI w) => Word32 -> Register 'X -> Int32 -> Register w -> Register w -> m ()
+ldstp w rn@(R n) imm (R t1) (R t2) = instr $  w
+                                          .|. (b64 rn `shift` 31)
+                                          .|. (immW   `shift` 15)
+                                          .|. (t2     `shift` 10)
+                                          .|. (n      `shift`  5)
+                                          .|. (t1     `shift`  0)
+    where
+        immW :: Word32
+        immW = fromIntegral (AD.mask 7 .&. imm')
+        imm' :: Int32
+        imm' = case sing @w of
+            SW -> imm `shiftR` 2
+            SX -> imm `shiftR` 3
+
+ldp :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> PAddress -> m ()
+ldp rt1 rt2 PostIndex { .. }    = ldstp 0x28c00000 postiR postiImm rt1 rt2
+ldp rt1 rt2 PreIndex { .. }     = ldstp 0x29c00000 preiR  preiImm  rt1 rt2
+ldp rt1 rt2 SignedOffset { .. } = ldstp 0x29400000 soR    soImm    rt1 rt2
+
 -- | C6.2.132 LDR (literal)
 ldr :: (CodeMonad AArch64 m, SingI w) => Register w -> Word9 -> m ()
 ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
@@ -490,6 +532,13 @@ orrShiftedRegister rd@(R d) (R n) (R m) sht imm6 = instr $  (b64 rd `shift` 31)
 
 ret :: CodeMonad AArch64 m => Register 'X -> m ()
 ret (R n) = instr $ 0xd65f0000 .|. (n `shift` 5)
+
+-- | C6.2.273 STP
+
+stp :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> PAddress -> m ()
+stp rt1 rt2 PostIndex { .. }    = ldstp 0x28800000 postiR postiImm rt1 rt2
+stp rt1 rt2 PreIndex { .. }     = ldstp 0x29800000 preiR  preiImm  rt1 rt2
+stp rt1 rt2 SignedOffset { .. } = ldstp 0x29000000 soR    soImm    rt1 rt2
 
 -- | C6.2.308 SUB
 

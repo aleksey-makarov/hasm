@@ -49,12 +49,12 @@ intToChar = do
 
 readUInt32 :: CodeMonad AArch64 m => Symbol -> m ()
 readUInt32 charToIntSymbol = do
-    instr 0 -- stp x29 x30 [sp, #-48]!
+    stp x29 x30 $ PreIndex sp (-48)
     movz w2 $ LSL0 0x0
     movSP x29 sp
-    instr 0 -- stp x19 x20 [sp, #16]
+    stp x19 x20 $ SignedOffset sp 16
     mov x20 x0
-    instr 0 -- stp x21 x22 [sp, #32]
+    stp x21 x22 $ SignedOffset sp 32
     mov x22 x1
     add x21 x0 $ Immediate 0x8
     l <- label
@@ -64,10 +64,10 @@ readUInt32 charToIntSymbol = do
     add w2 w19 w0
     cmp x20 x21
     bcond NE l
-    instr 0 -- ldp x19 x20, [sp, #16]
+    ldp x19 x20 $ SignedOffset sp 16
     instr 0 -- str w2 [x22]
-    instr 0 -- ldp x21 x22 [sp, #32]
-    instr 0 -- ldp x29 x30 [sp] #48
+    ldp x21 x22 $ SignedOffset sp 32
+    ldp x29 x30 $ PostIndex sp 48
     ret x30
     nop
 
