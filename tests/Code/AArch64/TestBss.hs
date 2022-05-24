@@ -71,8 +71,38 @@ readUInt32 charToIntSymbol = do
     ret x30
     nop
 
+writeUInt32 :: CodeMonad AArch64 m => Symbol -> m ()
+writeUInt32 _intToCharSymbol = do
+    instr 0 -- stp x29, x30, [sp, #-48]!
+    mov x29 sp
+    instr 0 -- stp x19, x20, [sp, #16]
+    mov x20 x1
+    instr 0 -- mov w19 0x1c
+    instr 0 -- str x21, [sp, #32]
+    mov w21 w0
+    nop
+    instr 0 -- lsr w0, w21, w19
+    instr 0 -- and w0 w0 0xf
+    instr 0 -- bl  38 <int_to_char>
+    instr 0 -- strb w0, [x20], #1
+    instr 0 -- sub w19 w19 0x4
+    instr 0 -- cmn w19, #0x4
+    instr 0 -- b.ne c8 <write_uint32+0x20>  // b.any
+    instr 0 -- ldp x19, x20, [sp, #16]
+    instr 0 -- ldr x21, [sp, #32]
+    instr 0 -- ldp x29, x30, [sp], #48
+    ret x30
+
 testBss :: (CodeMonad AArch64 m, MonadFix m) => m ()
 testBss = mdo
+
+    writeUInt32 int2c
+
+    instr 0xffffffff
+    instr 0x11111111
+    instr 0x11111111
+    instr 0x11111111
+    instr 0x11111111
 
     readUInt32 c2int
 
@@ -83,6 +113,7 @@ testBss = mdo
 
     c2int <- label
     charToInt
+    int2c <- label
     intToChar
 
     void $ labelExtern "_start"

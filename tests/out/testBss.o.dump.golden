@@ -16,7 +16,13 @@ section 1 ".text" {
     EntSize:   0x0000000000000000
     Info:      0x00000000
     Link:      0x00000000
-    Data:      fd 7b bd a9 02 00 80 52 fd 03 00 91 f3 53 01 a9 # .{.....R.....S..
+    Data:      00 00 00 00 fd 03 1f aa 00 00 00 00 f4 03 01 aa # ................
+               00 00 00 00 00 00 00 00 f5 03 00 2a 1f 20 03 d5 # ...........*. ..
+               00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 # ................
+               00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 # ................
+               00 00 00 00 00 00 00 00 c0 03 5f d6 ff ff ff ff # .........._.....
+               11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 11 # ................
+               fd 7b bd a9 02 00 80 52 fd 03 00 91 f3 53 01 a9 # .{.....R.....S..
                f4 03 00 aa f5 5b 02 a9 f6 03 01 aa 15 20 00 91 # .....[....... ..
                80 16 40 38 53 6c 1c 53 0e 00 00 94 62 02 00 0b # ..@8Sl.S....b...
                9f 02 15 eb 61 ff ff 54 f3 53 41 a9 c2 02 00 b9 # ....a..T.SA.....
@@ -37,7 +43,7 @@ symbol table section 4 ".symtab" {
     Addr:      0x0000000000000000
     AddrAlign: 0x0000000000000008
     EntSize:   0x0000000000000018
-    Info:      0x00000004
+    Info:      0x00000005
     Link:      0x00000003
     Data:      
         symbol "" {
@@ -47,32 +53,39 @@ symbol table section 4 ".symtab" {
             Value: 0x0000000000000000
             Size:  0x0000000000000000
         }
-        symbol "$text@32" {
+        symbol "$text@128" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
-            Value: 0x0000000000000020
+            Value: 0x0000000000000080
             Size:  0x0000000000000000
         }
-        symbol "$text@96" {
+        symbol "$text@192" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
-            Value: 0x0000000000000060
+            Value: 0x00000000000000c0
             Size:  0x0000000000000000
         }
-        symbol "$text@144" {
+        symbol "$text@240" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
-            Value: 0x0000000000000090
+            Value: 0x00000000000000f0
+            Size:  0x0000000000000000
+        }
+        symbol "$text@248" {
+            Bind:  STB_Local
+            Type:  STT_NoType
+            ShNdx: SHN_EXT 1
+            Value: 0x00000000000000f8
             Size:  0x0000000000000000
         }
         symbol "_start" {
             Bind:  STB_Global
             Type:  STT_NoType
             ShNdx: SHN_EXT 1
-            Value: 0x00000000000000b8
+            Value: 0x0000000000000118
             Size:  0x0000000000000000
         }
 }
@@ -84,8 +97,8 @@ section 3 ".strtab" {
     EntSize:   0x0000000000000000
     Info:      0x00000000
     Link:      0x00000000
-    Data:      00 24 74 65 78 74 40 31 34 34 00 24 74 65 78 74 # .$text@144.$text
-               40 39 36 00 24 74 65 78 74 40 33 32 00 5f 73 74 # @96.$text@32._st
-               61 72 74 00                                     # art.
+    Data:      00 24 74 65 78 74 40 32 34 38 00 24 74 65 78 74 # .$text@248.$text
+               40 32 34 30 00 24 74 65 78 74 40 31 39 32 00 24 # @240.$text@192.$
+               74 65 78 74 40 31 32 38 00 5f 73 74 61 72 74 00 # text@128._start.
 }
 section table
