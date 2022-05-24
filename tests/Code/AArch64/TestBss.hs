@@ -58,7 +58,7 @@ readUInt32 charToIntSymbol = do
     mov x22 x1
     add x21 x0 $ Immediate 0x8
     l <- label
-    instr 0 -- ldrb w0 [x20] #1
+    ldrb w0 $ PostIndex x20 1
     lsl w19 w2 4
     bl charToIntSymbol
     add w2 w19 w0

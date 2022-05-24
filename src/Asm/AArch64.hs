@@ -49,6 +49,7 @@ module Asm.AArch64
     , csel
     , ldp
     , ldr
+    , ldrb
     , lsl
     , movSP
     , mov
@@ -450,31 +451,40 @@ ldp rt1 rt2 PSignedOffset { .. } = ldstp 0x29400000 psoR    psoImm    rt1 rt2
 
 -- | C6.2.131 LDR (Immediate)
 
-ldst :: forall m w . (CodeMonad AArch64 m, SingI w) => Word32 -> Register 'X -> Int32 -> Register w -> m ()
-ldst w (R n) imm rt@(R t) = instr $ w
-                                 .|. (b64 rt `shift` 30)
-                                 .|. (immW   `shift` 12)
-                                 .|. (n      `shift`  5)
-                                 .|. (t      `shift`  0)
+ldstSz :: forall w . SingI w => Register w -> Word2
+ldstSz _ = case sing @w of
+    SW -> 0b10
+    SX -> 0b11
+
+ldstFixImm :: forall w . SingI w => Register w -> Int32 -> Word9
+ldstFixImm _ imm = fromIntegral (AD.mask 9 .&. imm')
     where
-        immW :: Word32
-        immW = fromIntegral (AD.mask 9 .&. imm')
         imm' :: Int32
         imm' = case sing @w of
             SW -> imm `shiftR` 2
             SX -> imm `shiftR` 3
 
-ldstu :: forall m w . (CodeMonad AArch64 m, SingI w) => Word32 -> Register 'X -> Word32 -> Register w -> m ()
-ldstu w (R n) imm rt@(R t) = instr $ w
-                                  .|. (b64 rt `shift` 30)
-                                  .|. (imm    `shift` 10)
-                                  .|. (n      `shift`  5)
-                                  .|. (t      `shift`  0)
+ldstFixImmB :: forall w . SingI w => Register w -> Int32 -> Word9
+ldstFixImmB _ imm = fromIntegral (AD.mask 9 .&. imm)
+
+ldst :: CodeMonad AArch64 m => Word32 -> Word2 -> Register 'X -> Word9 -> Register w -> m ()
+ldst w sz (R n) imm (R t) = instr $ w
+                                 .|. (sz  `shift` 30)
+                                 .|. (imm `shift` 12)
+                                 .|. (n   `shift`  5)
+                                 .|. (t   `shift`  0)
+
+ldstu :: CodeMonad AArch64 m => Word32 -> Word2 -> Register 'X -> Word12 -> Register w -> m ()
+ldstu w sz (R n) imm (R t) = instr $ w
+                                  .|. (sz  `shift` 30)
+                                  .|. (imm `shift` 10)
+                                  .|. (n   `shift`  5)
+                                  .|. (t   `shift`  0)
 
 ldrimm :: (CodeMonad AArch64 m, SingI w) => Register w -> Address -> m ()
-ldrimm rt PostIndex { .. }      = ldst  0xb8400400 postiR postiImm rt
-ldrimm rt PreIndex { .. }       = ldst  0xb8400c00 preiR  preiImm  rt
-ldrimm rt UnsignedOffset { .. } = ldstu 0xb9400000 soR    soImm    rt
+ldrimm rt PostIndex { .. }      = ldst  0xb8400400 (ldstSz rt) postiR (ldstFixImm rt postiImm) rt
+ldrimm rt PreIndex { .. }       = ldst  0xb8400c00 (ldstSz rt) preiR  (ldstFixImm rt  preiImm) rt
+ldrimm rt UnsignedOffset { .. } = ldstu 0xb9400000 (ldstSz rt) soR    soImm                    rt
 
 -- | C6.2.132 LDR (literal)
 
@@ -490,6 +500,13 @@ instance ArgLdr Word9 where
     ldr = ldrlit
 instance ArgLdr Address where
     ldr = ldrimm
+
+-- | C6.2.131 LDRB (Immediate)
+
+ldrb :: (CodeMonad AArch64 m, SingI w) => Register w -> Address -> m ()
+ldrb rt PostIndex { .. }      = ldst  0x38400400 0 postiR (ldstFixImmB rt postiImm) rt
+ldrb rt PreIndex { .. }       = ldst  0x38400c00 0 preiR  (ldstFixImmB rt  preiImm) rt
+ldrb rt UnsignedOffset { .. } = ldstu 0x39400000 0 soR    soImm                     rt
 
 -- | C6.2.178 LSL (immediate)
 
@@ -587,9 +604,9 @@ stp rt1 rt2 PSignedOffset { .. } = ldstp 0x29000000 psoR    psoImm    rt1 rt2
 -- | C6.2.274 STP (Immediate)
 
 str :: (CodeMonad AArch64 m, SingI w) => Register w -> Address -> m ()
-str rt PostIndex { .. }      = ldst  0xb8000400 postiR postiImm rt
-str rt PreIndex { .. }       = ldst  0xb9000c00 preiR  preiImm  rt
-str rt UnsignedOffset { .. } = ldstu 0xb9000000 soR    soImm    rt
+str rt PostIndex { .. }      = ldst  0xb8000400 (ldstSz rt) postiR (ldstFixImm rt postiImm) rt
+str rt PreIndex { .. }       = ldst  0xb9000c00 (ldstSz rt) preiR  (ldstFixImm rt  preiImm) rt
+str rt UnsignedOffset { .. } = ldstu 0xb9000000 (ldstSz rt) soR    soImm                    rt
 
 -- | C6.2.308 SUB
 
