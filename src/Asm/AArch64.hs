@@ -34,6 +34,7 @@ module Asm.AArch64
     , MovData (..)
     , Shift (..)
 
+    , Address (..)
     , PAddress (..)
 
     -- * Instructions
@@ -57,6 +58,7 @@ module Asm.AArch64
     , nop
     , ret
     , stp
+    , str
     , sub
     , subs
     , svc
@@ -248,6 +250,20 @@ data MovData = LSL0  Word16
              | LSL48 Word16
 
 data PAddress
+    = PPostIndex
+        { ppostiR   :: Register 'X
+        , ppostiImm :: Int32
+        }
+    | PPreIndex
+        { ppreiR   :: Register 'X
+        , ppreiImm :: Int32
+        }
+    | PSignedOffset
+        { psoR   :: Register 'X
+        , psoImm :: Int32
+        }
+
+data Address
     = PostIndex
         { postiR   :: Register 'X
         , postiImm :: Int32
@@ -256,9 +272,9 @@ data PAddress
         { preiR   :: Register 'X
         , preiImm :: Int32
         }
-    | SignedOffset
+    | UnsignedOffset
         { soR   :: Register 'X
-        , soImm :: Int32
+        , soImm :: Word32
         }
 
 -- | C6.2.4 ADD
@@ -413,12 +429,12 @@ csel rd@(R d) (R n) (R m) cond = instr $  (b64 rd `shift` 31)
 
 -- FIXME: check the `imm` argument
 ldstp :: forall m w . (CodeMonad AArch64 m, SingI w) => Word32 -> Register 'X -> Int32 -> Register w -> Register w -> m ()
-ldstp w rn@(R n) imm (R t1) (R t2) = instr $  w
-                                          .|. (b64 rn `shift` 31)
-                                          .|. (immW   `shift` 15)
-                                          .|. (t2     `shift` 10)
-                                          .|. (n      `shift`  5)
-                                          .|. (t1     `shift`  0)
+ldstp w (R n) imm rt1@(R t1) (R t2) = instr $  w
+                                           .|. (b64 rt1 `shift` 31)
+                                           .|. (immW   `shift` 15)
+                                           .|. (t2     `shift` 10)
+                                           .|. (n      `shift`  5)
+                                           .|. (t1     `shift`  0)
     where
         immW :: Word32
         immW = fromIntegral (AD.mask 7 .&. imm')
@@ -428,24 +444,52 @@ ldstp w rn@(R n) imm (R t1) (R t2) = instr $  w
             SX -> imm `shiftR` 3
 
 ldp :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> PAddress -> m ()
-ldp rt1 rt2 PostIndex { .. }    = ldstp 0x28c00000 postiR postiImm rt1 rt2
-ldp rt1 rt2 PreIndex { .. }     = ldstp 0x29c00000 preiR  preiImm  rt1 rt2
-ldp rt1 rt2 SignedOffset { .. } = ldstp 0x29400000 soR    soImm    rt1 rt2
+ldp rt1 rt2 PPostIndex { .. }    = ldstp 0x28c00000 ppostiR ppostiImm rt1 rt2
+ldp rt1 rt2 PPreIndex { .. }     = ldstp 0x29c00000 ppreiR  ppreiImm  rt1 rt2
+ldp rt1 rt2 PSignedOffset { .. } = ldstp 0x29400000 psoR    psoImm    rt1 rt2
+
+-- | C6.2.131 LDR (Immediate)
+
+ldst :: forall m w . (CodeMonad AArch64 m, SingI w) => Word32 -> Register 'X -> Int32 -> Register w -> m ()
+ldst w (R n) imm rt@(R t) = instr $ w
+                                 .|. (b64 rt `shift` 30)
+                                 .|. (immW   `shift` 12)
+                                 .|. (n      `shift`  5)
+                                 .|. (t      `shift`  0)
+    where
+        immW :: Word32
+        immW = fromIntegral (AD.mask 9 .&. imm')
+        imm' :: Int32
+        imm' = case sing @w of
+            SW -> imm `shiftR` 2
+            SX -> imm `shiftR` 3
+
+ldstu :: forall m w . (CodeMonad AArch64 m, SingI w) => Word32 -> Register 'X -> Word32 -> Register w -> m ()
+ldstu w (R n) imm rt@(R t) = instr $ w
+                                  .|. (b64 rt `shift` 30)
+                                  .|. (imm    `shift` 10)
+                                  .|. (n      `shift`  5)
+                                  .|. (t      `shift`  0)
+
+ldrimm :: (CodeMonad AArch64 m, SingI w) => Register w -> Address -> m ()
+ldrimm rt PostIndex { .. }      = ldst  0xb8400400 postiR postiImm rt
+ldrimm rt PreIndex { .. }       = ldst  0xb8400c00 preiR  preiImm  rt
+ldrimm rt UnsignedOffset { .. } = ldstu 0xb9400000 soR    soImm    rt
 
 -- | C6.2.132 LDR (literal)
-ldr :: (CodeMonad AArch64 m, SingI w) => Register w -> Word9 -> m ()
-ldr r@(R n) imm9 = instr $ (b64 r `shift` 30)
-                        .|. 0x18000000
-                        .|. (imm9' `shift` 5)
-                        .|. n
-    where
-        imm9' = fixWord 9 imm9 -- FIXME: Word9 should keep verified integer
 
--- offsetToImm9 :: MonadThrow m => SectionOffset -> m Word9
--- offsetToImm9 (SectionOffset o)
---   | o .&. 0x3 /= 0    = $chainedError $ "offset is not aligned: " ++ show o
---   | not $ isBitN 11 o = $chainedError "offset is too big"
---   | otherwise         = return $ fromIntegral ((o `shiftR` 2) .&. mask 9)
+ldrlit :: (CodeMonad AArch64 m, SingI w) => Register w -> Word9 -> m ()
+ldrlit r@(R n) imm9 = instr $ 0x18000000
+                           .|. (b64 r `shift` 30)
+                           .|. (imm9  `shift`  5)
+                           .|. (n     `shift`  0)
+
+class ArgLdr a where
+    ldr :: (CodeMonad AArch64 m, SingI w) => Register w -> a -> m ()
+instance ArgLdr Word9 where
+    ldr = ldrlit
+instance ArgLdr Address where
+    ldr = ldrimm
 
 -- | C6.2.178 LSL (immediate)
 
@@ -536,9 +580,16 @@ ret (R n) = instr $ 0xd65f0000 .|. (n `shift` 5)
 -- | C6.2.273 STP
 
 stp :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> PAddress -> m ()
-stp rt1 rt2 PostIndex { .. }    = ldstp 0x28800000 postiR postiImm rt1 rt2
-stp rt1 rt2 PreIndex { .. }     = ldstp 0x29800000 preiR  preiImm  rt1 rt2
-stp rt1 rt2 SignedOffset { .. } = ldstp 0x29000000 soR    soImm    rt1 rt2
+stp rt1 rt2 PPostIndex { .. }    = ldstp 0x28800000 ppostiR ppostiImm rt1 rt2
+stp rt1 rt2 PPreIndex { .. }     = ldstp 0x29800000 ppreiR  ppreiImm  rt1 rt2
+stp rt1 rt2 PSignedOffset { .. } = ldstp 0x29000000 psoR    psoImm    rt1 rt2
+
+-- | C6.2.274 STP (Immediate)
+
+str :: (CodeMonad AArch64 m, SingI w) => Register w -> Address -> m ()
+str rt PostIndex { .. }      = ldst  0xb8000400 postiR postiImm rt
+str rt PreIndex { .. }       = ldst  0xb9000c00 preiR  preiImm  rt
+str rt UnsignedOffset { .. } = ldstu 0xb9000000 soR    soImm    rt
 
 -- | C6.2.308 SUB
 
