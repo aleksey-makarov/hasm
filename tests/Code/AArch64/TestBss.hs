@@ -94,31 +94,39 @@ writeUInt32 intToCharSymbol = mdo
     ldp x29 x30 $ PPostIndex sp 48
     ret x30
 
-mainx :: (CodeMonad AArch64 m, MonadFix m) => m ()
-mainx = mdo
+
+
+mainx :: (CodeMonad AArch64 m, MonadFix m) => Symbol -> Symbol -> m ()
+mainx uint32read uint32write = mdo
+
+    let
+        readx, writex :: Symbol
+        readx = uint32read
+        writex = uint32write
+
     stp x29 x30 $ PPreIndex sp (-32)
     movz w2 $ LSL0 0x11
     movz w0 $ LSL0 0x0
     movsp x29 sp
     str x19 $ UnsignedOffset sp 16
     instr 0 -- adrp x19 0 <main>
-    add x19 x19 $ Immediate 0
+    add x19 x19 $ Immediate 0 -- FIXME: relocation here
     mov x1 x19
-    instr 0 -- bl 0 <read>
+    bl readx
     add x1 x19 $ Immediate 0x14
     mov x0 x19
-    instr 0 -- bl 58 <main+0x58>
+    bl uint32read
     add x1 x19 $ Immediate 0x18
     add x0 x19 $ Immediate 0x9
-    instr 0 -- bl 58 <main+0x58>
+    bl uint32read
     ldp w2 w0 $ PSignedOffset x19 20
     mov x1 x19
     add w0 w2 w0
-    instr 0 -- bl a8 <write_uint32>
+    bl uint32write
     mov x1 x19
     movz w2 $ LSL0 0x8
     movz w0 $ LSL0 0x1
-    instr 0 -- bl 0 <write>
+    bl writex
     movz w0 $ LSL0 0x0
     ldr x19 $ UnsignedOffset sp 16
     ldp x29 x30 $ PPostIndex sp 32
@@ -127,7 +135,7 @@ mainx = mdo
 testBss :: (CodeMonad AArch64 m, MonadFix m) => m ()
 testBss = mdo
 
-    mainx
+    mainx uint32read uint32write
 
     instr 0xffffffff
     instr 0x11111111
@@ -135,6 +143,7 @@ testBss = mdo
     instr 0x11111111
     instr 0x11111111
 
+    uint32write <- label
     writeUInt32 int2c
 
     instr 0xffffffff
@@ -143,6 +152,7 @@ testBss = mdo
     instr 0x11111111
     instr 0x11111111
 
+    uint32read <- label
     readUInt32 c2int
 
     instr 0x11111111
