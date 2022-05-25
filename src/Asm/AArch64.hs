@@ -51,7 +51,7 @@ module Asm.AArch64
     , ldr
     , ldrb
     , lsl
-    , movSP
+    , movsp
     , mov
     , movk
     , movn
@@ -520,8 +520,8 @@ lsl rd rn sht = ubfm rd rn bp
 
 -- | C6.2.185 MOV (to/from SP)
 
-movSP :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> m ()
-movSP rd rn = add rd rn $ Immediate 0
+movsp :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> m ()
+movsp rd rn = add rd rn $ Immediate 0
 
 -- | C6.2.187 MOV
 

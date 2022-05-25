@@ -50,8 +50,8 @@ intToChar = do
 readUInt32 :: CodeMonad AArch64 m => Symbol -> m ()
 readUInt32 charToIntSymbol = do
     stp x29 x30 $ PPreIndex sp (-48)
-    movz w2 $ LSL0 0x0
-    movSP x29 sp
+    movz w2 $ LSL0 0
+    movsp x29 sp
     stp x19 x20 $ PSignedOffset sp 16
     mov x20 x0
     stp x21 x22 $ PSignedOffset sp 32
@@ -72,25 +72,25 @@ readUInt32 charToIntSymbol = do
     nop
 
 writeUInt32 :: CodeMonad AArch64 m => Symbol -> m ()
-writeUInt32 _intToCharSymbol = do
-    instr 0 -- stp x29, x30, [sp, #-48]!
-    mov x29 sp
-    instr 0 -- stp x19, x20, [sp, #16]
+writeUInt32 intToCharSymbol = do
+    stp x29 x30 $ PPreIndex sp (-48)
+    movsp x29 sp
+    stp x19 x20 $ PSignedOffset sp 16
     mov x20 x1
-    instr 0 -- mov w19 0x1c
-    instr 0 -- str x21, [sp, #32]
+    instr 0 -- movz w19 $ LSL0 0x1c
+    instr 0 -- str x21 $ UnsignedOffset sp 32
     mov w21 w0
     nop
     instr 0 -- lsr w0, w21, w19
     instr 0 -- and w0 w0 0xf
-    instr 0 -- bl  38 <int_to_char>
+    bl intToCharSymbol
     instr 0 -- strb w0, [x20], #1
     instr 0 -- sub w19 w19 0x4
     instr 0 -- cmn w19, #0x4
     instr 0 -- b.ne c8 <write_uint32+0x20>  // b.any
-    instr 0 -- ldp x19, x20, [sp, #16]
-    instr 0 -- ldr x21, [sp, #32]
-    instr 0 -- ldp x29, x30, [sp], #48
+    ldp x19 x20 $ PSignedOffset sp 16
+    instr 0 -- ldr x21 $ UnsignedOffset sp 32
+    ldp x29 x30 $ PPostIndex sp 48
     ret x30
 
 testBss :: (CodeMonad AArch64 m, MonadFix m) => m ()
