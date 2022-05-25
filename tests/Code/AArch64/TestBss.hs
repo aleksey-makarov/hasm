@@ -86,7 +86,7 @@ writeUInt32 intToCharSymbol = mdo
     and w0 w0 $ BitPattern 0 0 3 -- 0xf
     bl intToCharSymbol
     strb w0 $ PostIndex x20 1
-    instr 0 -- sub w19 w19 0x4
+    sub w19 w19 $ Immediate 0x4
     instr 0 -- cmn w19, #0x4
     bcond NE l
     ldp x19 x20 $ PSignedOffset sp 16
