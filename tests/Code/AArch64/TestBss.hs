@@ -78,7 +78,7 @@ writeUInt32 intToCharSymbol = do
     stp x19 x20 $ PSignedOffset sp 16
     mov x20 x1
     instr 0 -- movz w19 $ LSL0 0x1c
-    instr 0 -- str x21 $ UnsignedOffset sp 32
+    str x21 $ UnsignedOffset sp 32
     mov w21 w0
     nop
     instr 0 -- lsr w0, w21, w19
@@ -89,7 +89,7 @@ writeUInt32 intToCharSymbol = do
     instr 0 -- cmn w19, #0x4
     instr 0 -- b.ne c8 <write_uint32+0x20>  // b.any
     ldp x19 x20 $ PSignedOffset sp 16
-    instr 0 -- ldr x21 $ UnsignedOffset sp 32
+    ldr x21 $ UnsignedOffset sp 32
     ldp x29 x30 $ PPostIndex sp 48
     ret x30
 
