@@ -71,8 +71,8 @@ readUInt32 charToIntSymbol = do
     ret x30
     nop
 
-writeUInt32 :: CodeMonad AArch64 m => Symbol -> m ()
-writeUInt32 intToCharSymbol = do
+writeUInt32 :: (CodeMonad AArch64 m, MonadFix m) => Symbol -> m ()
+writeUInt32 intToCharSymbol = mdo
     stp x29 x30 $ PPreIndex sp (-48)
     movsp x29 sp
     stp x19 x20 $ PSignedOffset sp 16
@@ -81,13 +81,14 @@ writeUInt32 intToCharSymbol = do
     str x21 $ UnsignedOffset sp 32
     mov w21 w0
     nop
+    l <- label
     instr 0 -- lsr w0, w21, w19
     instr 0 -- and w0 w0 0xf
     bl intToCharSymbol
     strb w0 $ PostIndex x20 1
     instr 0 -- sub w19 w19 0x4
     instr 0 -- cmn w19, #0x4
-    instr 0 -- b.ne c8 <write_uint32+0x20>  // b.any
+    bcond NE l
     ldp x19 x20 $ PSignedOffset sp 16
     ldr x21 $ UnsignedOffset sp 32
     ldp x29 x30 $ PPostIndex sp 48
