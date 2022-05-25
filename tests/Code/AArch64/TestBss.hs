@@ -84,7 +84,7 @@ writeUInt32 intToCharSymbol = do
     instr 0 -- lsr w0, w21, w19
     instr 0 -- and w0 w0 0xf
     bl intToCharSymbol
-    instr 0 -- strb w0, [x20], #1
+    strb w0 $ PostIndex x20 1
     instr 0 -- sub w19 w19 0x4
     instr 0 -- cmn w19, #0x4
     instr 0 -- b.ne c8 <write_uint32+0x20>  // b.any

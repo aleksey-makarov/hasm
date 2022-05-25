@@ -60,6 +60,7 @@ module Asm.AArch64
     , ret
     , stp
     , str
+    , strb
     , sub
     , subs
     , svc
@@ -607,6 +608,13 @@ str :: (CodeMonad AArch64 m, SingI w) => Register w -> Address -> m ()
 str rt PostIndex { .. }      = ldst  0xb8000400 (ldstSz rt) postiR (ldstFixImm  rt postiImm) rt
 str rt PreIndex { .. }       = ldst  0xb9000c00 (ldstSz rt) preiR  (ldstFixImm  rt preiImm)  rt
 str rt UnsignedOffset { .. } = ldstu 0xb9000000 (ldstSz rt) soR    (ldstuFixImm rt soImm)    rt
+
+-- | C6.2.131 LDRB (Immediate)
+
+strb :: (CodeMonad AArch64 m, SingI w) => Register w -> Address -> m ()
+strb rt PostIndex { .. }      = ldst  0x38000400 0 postiR (ldstFixImm rt postiImm) rt
+strb rt PreIndex { .. }       = ldst  0x38000c00 0 preiR  (ldstFixImm rt  preiImm) rt
+strb rt UnsignedOffset { .. } = ldstu 0x39000000 0 soR    soImm                    rt
 
 -- | C6.2.308 SUB
 
