@@ -83,7 +83,7 @@ writeUInt32 intToCharSymbol = mdo
     nop
     l <- label
     lsr w0 w21 w19
-    instr 0 -- and w0 w0 0xf
+    and w0 w0 $ BitPattern 0 0 3 -- 0xf
     bl intToCharSymbol
     strb w0 $ PostIndex x20 1
     instr 0 -- sub w19 w19 0x4
