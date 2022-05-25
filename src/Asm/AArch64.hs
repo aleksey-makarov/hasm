@@ -51,6 +51,7 @@ module Asm.AArch64
     , ldr
     , ldrb
     , lsl
+    , lsr
     , movsp
     , mov
     , movk
@@ -517,6 +518,15 @@ lsl rd rn sht = ubfm rd rn bp
         bp = case sing @w of
             SW -> BitPattern 0 (negate sht .&. AD.mask 5) (31 - sht)
             SX -> BitPattern 1 (negate sht .&. AD.mask 6) (63 - sht)
+
+-- | C6.2.180 LSR (register)
+
+lsr :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Register w -> m ()
+lsr rd@(R d) (R n) (R m) = instr $ 0x1ac02400
+                                .|. (b64 rd `shift` 31)
+                                .|. (m      `shift` 16)
+                                .|. (n      `shift`  5)
+                                .|. (d      `shift`  0)
 
 -- | C6.2.185 MOV (to/from SP)
 
