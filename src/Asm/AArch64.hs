@@ -45,6 +45,7 @@ module Asm.AArch64
     , bcond
     , b
     , bl
+    , cmn
     , cmp
     , csel
     , ldp
@@ -284,11 +285,13 @@ data Address
 -- | C6.2.4 ADD
 
 class ArgArithm a where
-    add, sub, subs :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> a w -> m ()
+    add, adds, sub, subs :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> a w -> m ()
 
 instance ArgArithm Immediate where
-    add  rd rn (Immediate imm)  = addImmediate    rd rn 0 imm
-    add  rd rn (ImmediateN imm) = addImmediate    rd rn 1 imm
+    add  rd rn (Immediate imm)  = addsImmediate 0 rd rn 0 imm
+    add  rd rn (ImmediateN imm) = addsImmediate 0 rd rn 1 imm
+    adds rd rn (Immediate imm)  = addsImmediate 1 rd rn 0 imm
+    adds rd rn (ImmediateN imm) = addsImmediate 1 rd rn 1 imm
     sub  rd rn (Immediate imm)  = subsImmediate 0 rd rn 0 imm
     sub  rd rn (ImmediateN imm) = subsImmediate 0 rd rn 1 imm
     subs rd rn (Immediate imm)  = subsImmediate 1 rd rn 0 imm
@@ -296,26 +299,35 @@ instance ArgArithm Immediate where
 
 instance ArgArithm ExtendedRegister where
     add = undefined
+    adds = undefined
     sub rd rn (ExtendedRegister m extend amount) = subsExtendedRegister 0 rd rn m extend amount
     subs rd rn (ExtendedRegister m extend amount) = subsExtendedRegister 1 rd rn m extend amount
 
 instance ArgArithm ShiftedRegister where
     add  rd rn ShiftedRegister { .. } = addsShiftedRegister 0 rd rn srReg srShift srImm
+    adds = undefined
     sub = undefined
     subs rd rn ShiftedRegister { .. } = subsShiftedRegister 1 rd rn srReg srShift srImm
 
 instance ArgArithm Register where
     add  rd rn rm = add rd rn $ ShiftedRegister rm LSL 0
+    adds = undefined
     sub  = undefined
     subs = undefined
 
-addImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word32 -> Word12 -> m ()
-addImmediate rd@(R d) (R n) sh imm = instr $  (b64 rd `shift` 31)
-                                          .|. 0x11000000
-                                          .|. (sh `shift` 22)
-                                          .|. (imm `shift` 10)
-                                          .|. (n `shift` 5)
-                                          .|. d
+addsImmediate :: (CodeMonad AArch64 m, SingI w) =>
+                                          Word1 ->
+                                     Register w ->
+                                     Register w ->
+                                         Word32 ->
+                                         Word12 -> m ()
+addsImmediate s rd@(R d) (R n) sh imm = instr $  0x11000000
+                                             .|. (b64 rd `shift` 31)
+                                             .|. (s      `shift` 29)
+                                             .|. (sh     `shift` 22)
+                                             .|. (imm    `shift` 10)
+                                             .|. (n      `shift`  5)
+                                             .|. (d      `shift`  0)
 
 addsShiftedRegister :: (CodeMonad AArch64 m, SingI w) =>
                                                 Word1 ->
@@ -324,14 +336,14 @@ addsShiftedRegister :: (CodeMonad AArch64 m, SingI w) =>
                                            Register w ->
                                                 Shift ->
                                                 Word6 -> m ()
-addsShiftedRegister s rd@(R d) (R n) (R m) sht imm6 = instr $  (b64 rd `shift` 31)
-                                                           .|. 0x0b000000
-                                                           .|. (s `shift` 29)
+addsShiftedRegister s rd@(R d) (R n) (R m) sht imm6 = instr $  0x0b000000
+                                                           .|. (b64 rd         `shift` 31)
+                                                           .|. (s              `shift` 29)
                                                            .|. (shiftToEnc sht `shift` 22)
-                                                           .|. (m `shift` 16)
-                                                           .|. (imm6 `shift` 10)
-                                                           .|. (n `shift` 5)
-                                                           .|. d
+                                                           .|. (m              `shift` 16)
+                                                           .|. (imm6           `shift` 10)
+                                                           .|. (n              `shift`  5)
+                                                           .|. (d              `shift`  0)
 
 -- | C6.2.10 ADR
 
@@ -369,13 +381,13 @@ instance ArgBitwise ShiftedRegister where
     orr rd rn (ShiftedRegister rm sht imm6) = orrShiftedRegister rd rn rm sht imm6
 
 andImmediate :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> Word1 -> Word6 -> Word6 -> m ()
-andImmediate rd@(R d) (R n) nBit immr imms = instr $  (b64 rd `shift` 31)
-                                                  .|. 0x12000000
-                                                  .|. (nBit `shift` 22)
-                                                  .|. (immr `shift` 16)
-                                                  .|. (imms `shift` 10)
-                                                  .|. (n `shift` 5)
-                                                  .|. d
+andImmediate rd@(R d) (R n) nBit immr imms = instr $  0x12000000
+                                                  .|. (b64 rd `shift` 31)
+                                                  .|. (nBit   `shift` 22)
+                                                  .|. (immr   `shift` 16)
+                                                  .|. (imms   `shift` 10)
+                                                  .|. (n      `shift`  5)
+                                                  .|. (d      `shift`  0)
 
 -- | C6.2.26 B.<cond>
 
@@ -414,10 +426,13 @@ instance ArgB Symbol where
 
 class ArgArithm1 a where
     cmp :: (CodeMonad AArch64 m, SingI w) => Register w -> a w -> m ()
+    cmn :: (CodeMonad AArch64 m, SingI w) => Register w -> a w -> m ()
 instance ArgArithm1 Register where
     cmp rn rm = subs (R 31) rn $ ShiftedRegister rm LSL 0
+    cmn rn rm = adds (R 31) rn $ ShiftedRegister rm LSL 0
 instance ArgArithm1 Immediate where
     cmp rn arg = subs (mkReg 31) rn arg
+    cmn rn arg = adds (mkReg 31) rn arg
 
 -- | C6.2.69 CSEL
 
