@@ -41,6 +41,7 @@ module Asm.AArch64
     , instr
     , add
     , adr
+    , adrp
     , Asm.AArch64.and
     , bcond
     , b
@@ -347,20 +348,21 @@ addsShiftedRegister s rd@(R d) (R n) (R m) sht imm6 = instr $  0x0b000000
 
 -- | C6.2.10 ADR
 
-adr_ :: Register 'X -> Word21 -> Word32
-adr_ (R n) imm21 = 0x10000000 .|. imm .|. n
+adr_ :: Word1 -> Register 'X -> Word21 -> Word32
+adr_ op (R n) imm21 = 0x10000000 .|. op `shift` 31 .|. imm .|. n
     where
-        imm21' = fixWord 21 imm21 -- FIXME: Word21 should keep verified integer
-        immlo = imm21' .&. 3
-        immhi = imm21' `shiftR` 2
+        immlo = imm21 .&. 3
+        immhi = imm21 `shiftR` 2
         imm   = (immhi `shift` 5) .|. (immlo `shift` 29)
 
 class ArgADR a where
-    adr :: CodeMonad AArch64 m => Register 'X -> a -> m ()
+    adr, adrp :: CodeMonad AArch64 m => Register 'X -> a -> m ()
 instance ArgADR Word21 where
-    adr r w = instr $ adr_ r w
+    adr r w = instr $ adr_ 0 r w
+    adrp r w = instr $ adr_ 1 r w
 instance ArgADR Symbol where
-    adr r l = instrReloc (adr_ r 0) l R_AARCH64_ADR_PREL_LO21
+    adr r l = instrReloc (adr_ 0 r 0) l R_AARCH64_ADR_PREL_LO21
+    adrp r l = instrReloc (adr_ 1 r 0) l R_AARCH64_ADR_PREL_PG_HI21 -- FIXME: ?
 
 -- offsetToImm21 :: MonadThrow m => SectionOffset -> m Word21
 -- offsetToImm21 (SectionOffset o)

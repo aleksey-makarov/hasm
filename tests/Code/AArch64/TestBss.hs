@@ -109,7 +109,7 @@ mainx uint32read uint32write = mdo
     movz w0 $ LSL0 0x0
     movsp x29 sp
     str x19 $ UnsignedOffset sp 16
-    instr 0 -- adrp x19 0 <main>
+    adrp x19 (0 :: Word32) -- FIXME: relocation here
     add x19 x19 $ Immediate 0 -- FIXME: relocation here
     mov x1 x19
     bl readx
