@@ -17,13 +17,18 @@ import Asm.AArch64
 sysExit :: Word16
 sysExit = 93
 
-charToInt :: (CodeMonad AArch64 m, MonadFix m) => m ()
-charToInt = mdo
+testBss :: (CodeMonad AArch64 m, MonadFix m) => m ()
+testBss = mdo
+
+    -------------------------------------------------------
+    charToInt <- label
+    -------------------------------------------------------
+
     and w0 w0 $ BitPattern 0 0 7 -- #0xff
     sub w1 w0 $ Immediate 0x61
     and w1 w1 $ BitPattern 0 0 7 -- #0xff
     cmp w1 $ Immediate 0x5
-    bcond LS l
+    bcond LS l1
     sub w1 w0 $ Immediate 0x41
     sub w2 w0 $ Immediate 0x37
     and w1 w1 $ BitPattern 0 0 7 -- #0xff
@@ -31,12 +36,13 @@ charToInt = mdo
     cmp w1 $ Immediate 0x5
     csel w0 w0 w2 HI
     ret x30
-    l <- label
+    l1 <- label
     sub w0 w0 $ Immediate 0x57
     ret x30
 
-intToChar :: CodeMonad AArch64 m => m ()
-intToChar = do
+    -------------------------------------------------------
+    intToChar <- label
+    -------------------------------------------------------
 
     and w1 w0 $ BitPattern 0 0 7 -- 0xff
     cmp w0    $ Immediate 0x9
@@ -47,8 +53,10 @@ intToChar = do
     csel w0 w1 w0 HI
     ret x30
 
-readUInt32 :: CodeMonad AArch64 m => Symbol -> m ()
-readUInt32 charToIntSymbol = do
+    -------------------------------------------------------
+    readUInt32 <- label
+    -------------------------------------------------------
+
     stp x29 x30 $ PPreIndex sp (-48)
     movz w2 $ LSL0 0
     movsp x29 sp
@@ -57,13 +65,13 @@ readUInt32 charToIntSymbol = do
     stp x21 x22 $ PSignedOffset sp 32
     mov x22 x1
     add x21 x0 $ Immediate 0x8
-    l <- label
+    l2 <- label
     ldrb w0 $ PostIndex x20 1
     lsl w19 w2 4
-    bl charToIntSymbol
+    bl charToInt
     add w2 w19 w0
     cmp x20 x21
-    bcond NE l
+    bcond NE l2
     ldp x19 x20 $ PSignedOffset sp 16
     str w2 $ UnsignedOffset x22 0
     ldp x21 x22 $ PSignedOffset sp 32
@@ -71,8 +79,10 @@ readUInt32 charToIntSymbol = do
     ret x30
     nop
 
-writeUInt32 :: (CodeMonad AArch64 m, MonadFix m) => Symbol -> m ()
-writeUInt32 intToCharSymbol = mdo
+    -------------------------------------------------------
+    writeUInt32 <- label
+    -------------------------------------------------------
+
     stp x29 x30 $ PPreIndex sp (-48)
     movsp x29 sp
     stp x19 x20 $ PSignedOffset sp 16
@@ -84,7 +94,7 @@ writeUInt32 intToCharSymbol = mdo
     l <- label
     lsr w0 w21 w19
     and w0 w0 $ BitPattern 0 0 3 -- 0xf
-    bl intToCharSymbol
+    bl intToChar
     strb w0 $ PostIndex x20 1
     sub w19 w19 $ Immediate 0x4
     cmn w19 $ Immediate 0x4
@@ -94,15 +104,9 @@ writeUInt32 intToCharSymbol = mdo
     ldp x29 x30 $ PPostIndex sp 48
     ret x30
 
-
-
-mainx :: (CodeMonad AArch64 m, MonadFix m) => Symbol -> Symbol -> m ()
-mainx uint32read uint32write = mdo
-
-    let
-        readx, writex :: Symbol
-        readx = uint32read
-        writex = uint32write
+    -------------------------------------------------------
+    mainx <- label
+    -------------------------------------------------------
 
     stp x29 x30 $ PPreIndex sp (-32)
     movz w2 $ LSL0 0x11
@@ -112,61 +116,43 @@ mainx uint32read uint32write = mdo
     adrp x19 (0 :: Word32) -- FIXME: relocation here
     add x19 x19 $ Immediate 0 -- FIXME: relocation here
     mov x1 x19
-    bl readx
+    bl readSyscall
     add x1 x19 $ Immediate 0x14
     mov x0 x19
-    bl uint32read
+    bl readUInt32
     add x1 x19 $ Immediate 0x18
     add x0 x19 $ Immediate 0x9
-    bl uint32read
+    bl readUInt32
     ldp w2 w0 $ PSignedOffset x19 20
     mov x1 x19
     add w0 w2 w0
-    bl uint32write
+    bl writeUInt32
     mov x1 x19
     movz w2 $ LSL0 0x8
     movz w0 $ LSL0 0x1
-    bl writex
+    bl writeSyscall
     movz w0 $ LSL0 0x0
     ldr x19 $ UnsignedOffset sp 16
     ldp x29 x30 $ PPostIndex sp 32
     ret x30
 
-testBss :: (CodeMonad AArch64 m, MonadFix m) => m ()
-testBss = mdo
-
-    mainx uint32read uint32write
-
-    instr 0xffffffff
-    instr 0x11111111
-    instr 0x11111111
-    instr 0x11111111
-    instr 0x11111111
-
-    uint32write <- label
-    writeUInt32 int2c
-
-    instr 0xffffffff
-    instr 0x11111111
-    instr 0x11111111
-    instr 0x11111111
-    instr 0x11111111
-
-    uint32read <- label
-    readUInt32 c2int
-
-    instr 0x11111111
-    instr 0x11111111
-    instr 0x11111111
-    instr 0x11111111
-
-    c2int <- label
-    charToInt
-    int2c <- label
-    intToChar
-
+    -------------------------------------------------------
     void $ labelExtern "_start"
+    -------------------------------------------------------
 
+    bl mainx
     movz x0 $ LSL0 0
     movz x8 $ LSL0 sysExit
     svc 0
+
+    -------------------------------------------------------
+    writeSyscall <- label
+    -------------------------------------------------------
+
+    ret x30
+
+    -------------------------------------------------------
+    readSyscall <- label
+    -------------------------------------------------------
+
+    ret x30
