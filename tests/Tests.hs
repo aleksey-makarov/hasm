@@ -110,12 +110,17 @@ testExe name code maybeExpectedString =
 
 testExeBss :: [ TestTree ]
 testExeBss = [ testCase mkObjTestName $ mkObj name testBss
-             , after AllSucceed mkObjTestName $ goldenVsFile dumpObjTestName dumpGoldenName dumpOutName mkDump
+             , after AllSucceed mkObjTestName $ testGroup checkObjTestName
+                [ goldenVsFile dumpObjTestName dumpGoldenName dumpOutName mkDump
+                , testCase mkGccLdTestName $ ldGcc name
+                ]
              ]
     where
         name            = "testBss"
         mkObjTestName   = name ++ "_mkobj"
+        checkObjTestName = name ++ "_checkobj"
         dumpObjTestName = name ++ "_dump"
+        mkGccLdTestName = name ++ "_mkgcc"
         objName         = testsOutDir </> name <.> "o"
         dumpOutName     = testsOutDir </> name <.> "o" <.> "dump"
         dumpGoldenName  = testsOutDir </> name <.> "o" <.> "dump" <.> "golden"
