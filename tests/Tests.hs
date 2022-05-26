@@ -58,7 +58,7 @@ ldDummy name = do
         o = testsOutDir </> name <.> "dummy"
 
 ldGcc :: String -> IO ()
-ldGcc name = callProcess "aarch64-unknown-linux-gnu-gcc" [i, "-nostdlib", "-o", o]
+ldGcc name = callProcess "aarch64-unknown-linux-musl-gcc" [i, "-nostdlib", "-o", o]
     where
         i = testsOutDir </> name <.> "o"
         o = testsOutDir </> name <.> "gcc"

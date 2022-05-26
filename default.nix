@@ -2,9 +2,7 @@ let
 
   sources = import ./nix/sources.nix;
   pkgs = import sources.nixpkgs { };
-  pkgsCross = import sources.nixpkgs {
-    crossSystem.config = "aarch64-unknown-linux-gnu";
-  };
+  gccCross = pkgs.pkgsCross.aarch64-multiplatform.pkgsStatic.buildPackages.gcc;
 
   melf                 = pkgs.haskellPackages.callCabal2nix "melf"                 sources.melf                 {};
   exception-context-th = pkgs.haskellPackages.callCabal2nix "exception-context-th" sources.exception-context-th {};
@@ -25,8 +23,7 @@ in
           cabal2nix
           hpack
           niv
-          packdeps
           pkgs.qemu
-          pkgsCross.buildPackages.gcc
+          gccCross
         ]);
   }
