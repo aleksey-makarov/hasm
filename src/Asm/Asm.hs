@@ -464,7 +464,7 @@ assemble m = do
                     SymbolTableItemTxt { .. } -> Just <$> mkRelocation @a lrRelocation lrAddress stiTxtOffset 0
                     _ -> return Nothing
 
-        (_reloc, relocTxt) <- splitMapReverseM fTxtReloc relocations
+        (reloc, relocTxt) <- splitMapReverseM fTxtReloc relocations
 
         let
             fTxt :: TextChunk a -> Builder
@@ -668,6 +668,27 @@ assemble m = do
                 , esInfo      = 0
                 , esData      = ElfSectionData stringTableData
                 }
+
+        ---------------------------------------------------------------------
+        -- data
+        ---------------------------------------------------------------------
+
+        when (0 /= P.length reloc) $ do
+
+            relocSecN   <- getNextSectionN
+            addNewSection
+                ElfSection
+                    { esName      = ".rela.text"
+                    , esType      = SHT_RELA
+                    , esFlags     = SHF_EXT 64 -- FIXME (SHF_INFO_LINK This section headers sh_info field holds a section header table index) https://docs.oracle.com/cd/E23824_01/html/819-0690/chapter6-94076.html#chapter6-10675
+                    , esAddr      = 0
+                    , esAddrAlign = 8
+                    , esEntSize   = 0x18 -- FIXME
+                    , esN         = relocSecN
+                    , esLink      = fromIntegral symtabSecN
+                    , esInfo      = fromIntegral textSecN
+                    , esData      = ElfSectionData empty
+                    }
 
         ---------------------------------------------------------------------
         -- section table

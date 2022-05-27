@@ -169,4 +169,14 @@ section 5 ".strtab" {
                74 65 78 74 40 34 38 00 24 74 65 78 74 40 30 00 # text@48.$text@0.
                5f 73 74 61 72 74 00 24 62 73 73 40 30 00       # _start.$bss@0.
 }
+section 6 ".rela.text" {
+    Type:      SHT_RELA
+    Flags:     [SHF_EXT 64]
+    Addr:      0x0000000000000000
+    AddrAlign: 0x0000000000000008
+    EntSize:   0x0000000000000018
+    Info:      0x00000001
+    Link:      0x00000004
+    Data:      
+}
 section table
