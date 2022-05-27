@@ -508,6 +508,25 @@ assemble m = do
                 }
 
         ---------------------------------------------------------------------
+        -- data
+        ---------------------------------------------------------------------
+
+        -- dataSecN   <- getNextSectionN
+        -- addNewSection
+        --     ElfSection
+        --         { esName      = ".data"
+        --         , esType      = SHT_PROGBITS
+        --         , esFlags     = SHF_WRITE .|. SHF_ALLOC
+        --         , esAddr      = 0
+        --         , esAddrAlign = 1
+        --         , esEntSize   = 0
+        --         , esN         = dataSecN
+        --         , esLink      = 0
+        --         , esInfo      = 0
+        --         , esData      = ElfSectionData empty
+        --         }
+
+        ---------------------------------------------------------------------
         -- bss
         ---------------------------------------------------------------------
 
@@ -554,7 +573,7 @@ assemble m = do
                     , esType      = SHT_NOBITS
                     , esFlags     = SHF_WRITE .|. SHF_ALLOC
                     , esAddr      = 0
-                    , esAddrAlign = 1
+                    , esAddrAlign = 8 -- FIXME: arch-specific?
                     , esEntSize   = 0
                     , esN         = bssSecN
                     , esLink      = 0
@@ -616,11 +635,11 @@ assemble m = do
 
         symbolTable <- (fmap fSymbol . elems) <$> gets ecsSymbols
 
-        -- FIXME: ELFDATA2LSB -- wrong
+        -- FIXME: ELFDATA2LSB -- should be arch dependent
         (symbolTableData, stringTableData) <- serializeSymbolTable ELFDATA2LSB (zeroIndexStringItem : symbolTable)
 
-        strtabSecN   <- getNextSectionN
         symtabSecN   <- getNextSectionN
+        strtabSecN   <- getNextSectionN
 
         addNewSection
             ElfSection

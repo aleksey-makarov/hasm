@@ -140,6 +140,14 @@ testBss = mdo
     void $ labelExtern "_start"
     -------------------------------------------------------
 
+    let
+        stackSize = 256
+
+    stack <- allocateBSS 8 stackSize
+
+    adrp x19 stack
+    add x19 x19 $ LO12 stack
+
     bl mainx
     movz x0 $ LSL0 0
     movz x8 $ LSL0 sysExit

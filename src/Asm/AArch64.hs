@@ -37,6 +37,8 @@ module Asm.AArch64
     , Address (..)
     , PAddress (..)
 
+    , LO12 (..)
+
     -- * Instructions
     , instr
     , add
@@ -180,6 +182,8 @@ data ShiftedRegister (w :: RegisterWidth)
         , srImm   :: Word6
         }
 
+newtype LO12  (w :: RegisterWidth) = LO12 Symbol
+
 -- FIXME: use my HT module to generate this (Cond, Shift)
 data Cond = EQ -- Equal
           | NE -- Not Equal
@@ -289,14 +293,14 @@ class ArgArithm a where
     add, adds, sub, subs :: (CodeMonad AArch64 m, SingI w) => Register w -> Register w -> a w -> m ()
 
 instance ArgArithm Immediate where
-    add  rd rn (Immediate imm)  = addsImmediate 0 rd rn 0 imm
-    add  rd rn (ImmediateN imm) = addsImmediate 0 rd rn 1 imm
-    adds rd rn (Immediate imm)  = addsImmediate 1 rd rn 0 imm
-    adds rd rn (ImmediateN imm) = addsImmediate 1 rd rn 1 imm
-    sub  rd rn (Immediate imm)  = subsImmediate 0 rd rn 0 imm
-    sub  rd rn (ImmediateN imm) = subsImmediate 0 rd rn 1 imm
-    subs rd rn (Immediate imm)  = subsImmediate 1 rd rn 0 imm
-    subs rd rn (ImmediateN imm) = subsImmediate 1 rd rn 1 imm
+    add  rd rn (Immediate imm)  = instr $ addsImmediate 0 rd rn 0 imm
+    add  rd rn (ImmediateN imm) = instr $ addsImmediate 0 rd rn 1 imm
+    adds rd rn (Immediate imm)  = instr $ addsImmediate 1 rd rn 0 imm
+    adds rd rn (ImmediateN imm) = instr $ addsImmediate 1 rd rn 1 imm
+    sub  rd rn (Immediate imm)  =         subsImmediate 0 rd rn 0 imm
+    sub  rd rn (ImmediateN imm) =         subsImmediate 0 rd rn 1 imm
+    subs rd rn (Immediate imm)  =         subsImmediate 1 rd rn 0 imm
+    subs rd rn (ImmediateN imm) =         subsImmediate 1 rd rn 1 imm
 
 instance ArgArithm ExtendedRegister where
     add = undefined
@@ -316,19 +320,24 @@ instance ArgArithm Register where
     sub  = undefined
     subs = undefined
 
-addsImmediate :: (CodeMonad AArch64 m, SingI w) =>
-                                          Word1 ->
-                                     Register w ->
-                                     Register w ->
-                                         Word32 ->
-                                         Word12 -> m ()
-addsImmediate s rd@(R d) (R n) sh imm = instr $  0x11000000
-                                             .|. (b64 rd `shift` 31)
-                                             .|. (s      `shift` 29)
-                                             .|. (sh     `shift` 22)
-                                             .|. (imm    `shift` 10)
-                                             .|. (n      `shift`  5)
-                                             .|. (d      `shift`  0)
+instance ArgArithm LO12 where
+    add  rd rn (LO12 l) = instrReloc (addsImmediate 0 rd rn 0 0) l R_AARCH64_ADD_ABS_LO12_NC
+    adds = undefined
+    sub  = undefined
+    subs = undefined
+
+addsImmediate :: SingI w =>
+                   Word1 ->
+              Register w ->
+              Register w ->
+                  Word32 ->
+                  Word12 -> Word32
+addsImmediate s rd@(R d) (R n) sh imm = 0x11000000 .|. (b64 rd `shift` 31)
+                                                   .|. (s      `shift` 29)
+                                                   .|. (sh     `shift` 22)
+                                                   .|. (imm    `shift` 10)
+                                                   .|. (n      `shift`  5)
+                                                   .|. (d      `shift`  0)
 
 addsShiftedRegister :: (CodeMonad AArch64 m, SingI w) =>
                                                 Word1 ->

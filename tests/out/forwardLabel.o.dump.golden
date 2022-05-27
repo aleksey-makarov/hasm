@@ -22,14 +22,14 @@ section 1 ".text" {
                6f 6b 0a                                        # ok.
 }
 string table section 2 ".shstrtab"
-symbol table section 4 ".symtab" {
+symbol table section 3 ".symtab" {
     Type:      SHT_SYMTAB
     Flags:     []
     Addr:      0x0000000000000000
     AddrAlign: 0x0000000000000008
     EntSize:   0x0000000000000018
     Info:      0x00000004
-    Link:      0x00000003
+    Link:      0x00000004
     Data:      
         symbol "" {
             Bind:  STB_Local
@@ -67,7 +67,7 @@ symbol table section 4 ".symtab" {
             Size:  0x0000000000000000
         }
 }
-section 3 ".strtab" {
+section 4 ".strtab" {
     Type:      SHT_STRTAB
     Flags:     []
     Addr:      0x0000000000000000
