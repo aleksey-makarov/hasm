@@ -143,6 +143,7 @@ testBss = mdo
     let
         stackSize = 256
 
+    _something <- allocateBSS 8 256
     stack <- allocateBSS 8 stackSize
 
     adrp x19 stack

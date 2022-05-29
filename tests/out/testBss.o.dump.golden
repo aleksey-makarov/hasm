@@ -58,7 +58,7 @@ symbol table section 4 ".symtab" {
     Addr:      0x0000000000000000
     AddrAlign: 0x0000000000000008
     EntSize:   0x0000000000000018
-    Info:      0x0000000c
+    Info:      0x0000000d
     Link:      0x00000005
     Data:      
         symbol "" {
@@ -131,6 +131,13 @@ symbol table section 4 ".symtab" {
             Value: 0x0000000000000000
             Size:  0x0000000000000100
         }
+        symbol "$bss@256" {
+            Bind:  STB_Local
+            Type:  STT_Object
+            ShNdx: SHN_EXT 3
+            Value: 0x0000000000000100
+            Size:  0x0000000000000100
+        }
         symbol "$text@376" {
             Bind:  STB_Local
             Type:  STT_NoType
@@ -164,10 +171,11 @@ section 5 ".strtab" {
     Data:      00 24 74 65 78 74 40 33 38 30 00 24 74 65 78 74 # .$text@380.$text
                40 33 37 36 00 24 74 65 78 74 40 32 34 34 00 24 # @376.$text@244.$
                74 65 78 74 40 32 30 30 00 24 74 65 78 74 40 31 # text@200.$text@1
-               36 38 00 24 74 65 78 74 40 31 32 30 00 24 74 65 # 68.$text@120.$te
-               78 74 40 38 38 00 24 74 65 78 74 40 35 36 00 24 # xt@88.$text@56.$
-               74 65 78 74 40 34 38 00 24 74 65 78 74 40 30 00 # text@48.$text@0.
-               5f 73 74 61 72 74 00 24 62 73 73 40 30 00       # _start.$bss@0.
+               36 38 00 24 74 65 78 74 40 31 32 30 00 24 62 73 # 68.$text@120.$bs
+               73 40 32 35 36 00 24 74 65 78 74 40 38 38 00 24 # s@256.$text@88.$
+               74 65 78 74 40 35 36 00 24 74 65 78 74 40 34 38 # text@56.$text@48
+               00 24 74 65 78 74 40 30 00 5f 73 74 61 72 74 00 # .$text@0._start.
+               24 62 73 73 40 30 00                            # $bss@0.
 }
 section 6 ".rela.text" {
     Type:      SHT_RELA
@@ -177,6 +185,7 @@ section 6 ".rela.text" {
     EntSize:   0x0000000000000018
     Info:      0x00000001
     Link:      0x00000004
-    Data:      
+    Data:      0x0000000000000160 0x0000000000000000 R_AARCH64_ADR_PREL_PG_HI21 10 ("$bss@256" bind: STB_Local type: STT_Object sindex: SHN_EXT 3 value: 0x0000000000000100 size: 0x0000000000000100)
+               0x0000000000000164 0x0000000000000000 R_AARCH64_ADD_ABS_LO12_NC 10 ("$bss@256" bind: STB_Local type: STT_Object sindex: SHN_EXT 3 value: 0x0000000000000100 size: 0x0000000000000100)
 }
 section table

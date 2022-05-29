@@ -26,7 +26,6 @@ module Asm.Asm
     , CodeMonad
     , Symbol
     , KnownArch (..)
-    , RelocationType
     , ArchElfClass
 
     -- * Assembler directives
@@ -74,8 +73,9 @@ import Data.Word
 import Asm.Data
 import Asm.Relocation
 
-class KnownArch a where
+class (Integral (RelocationType a)) => KnownArch a where
     data Instruction a :: Type
+    type RelocationType a = t | t -> a
 
     instructionSize :: Num b => Instruction a -> b
     serializeInstruction :: Instruction a -> Builder
@@ -88,8 +88,6 @@ class KnownArch a where
            SectionOffset -> -- s (is the address of the symbol)
                    Int64 -> -- a (the addend for the relocation)
                              m (RelocationMonad ())
-
-type family RelocationType a = t | t -> a
 
 type ArchElfClass :: Type -> ElfClass
 type family ArchElfClass a = t | t -> a
@@ -378,7 +376,7 @@ layout sais =
         f :: (MonadThrow m, MonadState Int m) => SymbolAllocationInfo tag -> m (tag, Int)
         f SymbolAllocationInfo { .. } = do
             align2 saiAlignmet
-            position <- get
+            position <- MS.get
             modify (+ saiSize)
             return (saiTag, position)
     in
@@ -418,7 +416,8 @@ splitMapReverseM f l = foldlM f' ([], []) l
 mkSymbolName :: Show n => String -> n -> String
 mkSymbolName s n = "$" ++ s ++ "@" ++ show n -- FIXME: use hexadecimal
 
-assemble :: forall a m . (MonadCatch m, KnownArch a, IsElfClass (ArchElfClass a)) => StateT (CodeState a) m () -> m Elf
+assemble :: forall a m . (MonadCatch m, KnownArch a, IsElfClass (ArchElfClass a)) =>
+                                                        StateT (CodeState a) m () -> m Elf
 assemble m = do
 
     CodeState {..} <- execStateT (m >> ltorg') codeStateInit
@@ -428,8 +427,8 @@ assemble m = do
         elfCompositionStateInit = ElfCompositionState 1 [h] symbolsArray
             where
                 h = ElfHeader
-                    { ehData       = ELFDATA2LSB
-                    , ehOSABI      = ELFOSABI_SYSV
+                    { ehData       = ELFDATA2LSB -- FIXME: Wrong
+                    , ehOSABI      = ELFOSABI_SYSV -- FIXME: ???
                     , ehABIVersion = 0
                     , ehType       = ET_REL
                     , ehMachine    = EM_AARCH64 -- FIXME: Wrong
@@ -448,13 +447,15 @@ assemble m = do
         let
             text = P.reverse textReversed
 
+            symbolToSymbolTableIndex :: Symbol -> Int
+            symbolToSymbolTableIndex (SymbolLocal i) = i
+            symbolToSymbolTableIndex (SymbolGlobal i) = i + symbolsLocalNext
+
             getSymbolTableItem :: MonadState (ElfCompositionState (ArchElfClass a)) m' =>
                 Symbol -> m' (SymbolTableItem (ArchElfClass a))
             getSymbolTableItem s = do
                 table <- gets ecsSymbols
-                return $ case s of
-                    SymbolLocal i  -> table ! i
-                    SymbolGlobal i -> table ! (i + symbolsLocalNext)
+                return $ table ! symbolToSymbolTableIndex s
 
             fTxtReloc :: (MonadThrow m', MonadState (ElfCompositionState (ArchElfClass a)) m') =>
                 RelocationTableItem a -> m' (Maybe (RelocationMonad ()))
@@ -670,10 +671,22 @@ assemble m = do
                 }
 
         ---------------------------------------------------------------------
-        -- data
+        -- .rela.text
         ---------------------------------------------------------------------
 
         when (0 /= P.length reloc) $ do
+
+            let
+                f :: RelocationTableItem a -> RelaXX (ArchElfClass a)
+                f RelocationTableItem { .. } =
+                    let
+                        relaOffset = fromIntegral $ getSectionOffset lrAddress
+                        relaSym    = 1 + (fromIntegral $ symbolToSymbolTableIndex lrSymbol)
+                        relaType   = fromIntegral lrRelocation
+                        relaAddend = 0
+                    in
+                        RelaXX { .. }
+                reloc' = serializeBList ELFDATA2LSB $ fmap f reloc -- FIXME: ELFDATA2LSB: Wrong
 
             relocSecN   <- getNextSectionN
             addNewSection
@@ -687,7 +700,7 @@ assemble m = do
                     , esN         = relocSecN
                     , esLink      = fromIntegral symtabSecN
                     , esInfo      = fromIntegral textSecN
-                    , esData      = ElfSectionData empty
+                    , esData      = ElfSectionData reloc'
                     }
 
         ---------------------------------------------------------------------
