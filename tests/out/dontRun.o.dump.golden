@@ -39,13 +39,20 @@ symbol table section 4 ".symtab" {
     Addr:      0x0000000000000000
     AddrAlign: 0x0000000000000008
     EntSize:   0x0000000000000018
-    Info:      0x0000000f
+    Info:      0x00000010
     Link:      0x00000005
     Data:      
         symbol "" {
             Bind:  STB_Local
             Type:  STT_NoType
             ShNdx: SHN_Undef
+            Value: 0x0000000000000000
+            Size:  0x0000000000000000
+        }
+        symbol "" {
+            Bind:  STB_Local
+            Type:  STT_Section
+            ShNdx: SHN_EXT 3
             Value: 0x0000000000000000
             Size:  0x0000000000000000
         }
