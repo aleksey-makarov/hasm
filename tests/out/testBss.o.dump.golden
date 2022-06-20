@@ -50,7 +50,7 @@ section 3 ".bss" {
     EntSize:   0x0000000000000000
     Info:      0x00000000
     Link:      0x00000000
-    Data:      
+    Data:      NoBits: 0
 }
 symbol table section 4 ".symtab" {
     Type:      SHT_SYMTAB
