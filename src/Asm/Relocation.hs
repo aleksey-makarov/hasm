@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 
 -- FIXME: use linear types for the array instead of ST (?)
+-- https://www.reddit.com/r/haskell/comments/1rcc8t/performance_of_the_st_monad_over_the_state_monad/
 
 module Asm.Relocation
     ( RelocationMonad
