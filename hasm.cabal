@@ -31,11 +31,10 @@ library
   exposed-modules:
       Asm.Asm
       Asm.AArch64
+      Asm.Data
       Asm.DummyLd
   other-modules:
-      Asm.Data
       Asm.Relocation
-      Paths_hasm
   hs-source-dirs:
       src
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wno-redundant-constraints

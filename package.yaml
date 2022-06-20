@@ -32,7 +32,10 @@ library:
   exposed-modules:
     - Asm.Asm
     - Asm.AArch64
+    - Asm.Data
     - Asm.DummyLd
+  other-modules:
+    - Asm.Relocation
 
 tests:
   test:

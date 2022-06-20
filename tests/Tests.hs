@@ -1,3 +1,5 @@
+{-# LANGUAGE BinaryLiterals #-}
+
 module Main (main) where
 
 import Prelude as P
@@ -7,7 +9,8 @@ import Data.Bits
 import Data.ByteString as BS
 import Data.ByteString.Lazy as BSL
 import Data.Elf
--- import Data.Word
+import Data.Int
+import Data.Word
 -- import Numeric
 import System.FilePath
 import System.Posix.Files
@@ -20,6 +23,7 @@ import Test.Tasty.HUnit
 
 import Asm.Asm
 import Asm.AArch64
+import Asm.Data
 import Asm.DummyLd
 
 import Code.AArch64.HelloWorld
@@ -126,11 +130,33 @@ testExeBss = [ testCase mkObjTestName $ mkObj name testBss
         dumpGoldenName  = testsOutDir </> name <.> "o" <.> "dump" <.> "golden"
         mkDump          = callCommand ("hobjdump -f " ++ objName ++ " > " ++ dumpOutName)
 
+fitNWidth :: Int
+fitNWidth = 4
+
+rightToMaybe :: Either a b -> Maybe b
+rightToMaybe = either (const Nothing) Just
+
+testFitNTestCase :: Int64 -> Maybe Word32 -> TestTree
+testFitNTestCase w mn = testCase (show w) $ (rightToMaybe $ fitN fitNWidth w) @?= mn
+
+testFitN :: TestTree
+testFitN = testGroup "testFitN"
+    [ testFitNTestCase   8  $ Nothing
+    , testFitNTestCase   7  $ Just 0b00111
+    , testFitNTestCase   1  $ Just 0b00001
+    , testFitNTestCase   0  $ Just 0b00000
+    , testFitNTestCase (-1) $ Just 0b01111
+    , testFitNTestCase (-2) $ Just 0b01110
+    , testFitNTestCase (-7) $ Just 0b01001
+    , testFitNTestCase (-8) $ Just 0b01000
+    , testFitNTestCase (-9) $ Nothing
+    ]
+
 --
 --------------------------------------------------
 
 main :: IO ()
-main = defaultMain $ testGroup "tests"
+main = defaultMain $ testGroup "tests" $ testFitN :
     (  testExe "helloWorld"   helloWorld   (Just "Hello World!\n")
     ++ testExe "forwardLabel" forwardLabel (Just "ok\n")
     ++ testExe "dontRun"      dontRun      Nothing

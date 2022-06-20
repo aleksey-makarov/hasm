@@ -37,14 +37,19 @@ readWord32 s = case readHex s of
 mask :: (Num b, Bits b, Ord b) => Int -> b
 mask n = (1 `shift` n) - 1
 
+-- signed w fits into bitN bits, i. e.
+-- -(2^(bitN - 1) <= w < 2^(bitN - 1)
+-- see tests
 fitN :: Int -> Int64 -> Either String Word32
 fitN bitN w =
-    if (if w >= 0 then h == 0 else h == complement m) -- FIXME: wrong! (???) what about the bit at (bitN - 1)???
+    if w .&. m' == hiBits
         then Right $ fromIntegral (w .&. m)
         else Left ("fitN error: n: " ++ show bitN ++ " w: " ++ printInt64 w ++ " mask: " ++ printInt64 m)
     where
+        positive = (1 `shift` (bitN - 1) .&. w) == 0
         m = mask bitN
-        h = w .&. complement m
+        m' = complement m
+        hiBits = if positive then 0 else m'
 
 fixWord :: Integral a => Int -> a -> Word32
 fixWord bitN v = mask bitN .&. fromIntegral v
