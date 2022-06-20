@@ -370,7 +370,7 @@ align2 a | a < 0               = $chainedError "negative align"
          | otherwise           = modify $ \ o -> (o + a - 1) .&. complement (a - 1)
 
 -- FIXME: optimize layout
-layout :: MonadThrow m => [SymbolAllocationInfo tag] -> m [(tag, Int)]
+layout :: MonadThrow m => [SymbolAllocationInfo tag] -> m ([(tag, Int)], Int)
 layout sais =
     let
         f :: (MonadThrow m, MonadState Int m) => SymbolAllocationInfo tag -> m (tag, Int)
@@ -380,7 +380,7 @@ layout sais =
             modify (+ saiSize)
             return (saiTag, position)
     in
-        evalStateT (mapM f sais) 0
+        runStateT (mapM f sais) 0
 
 --
 -----------------------------------------
@@ -564,7 +564,7 @@ assemble m = do
                             , ..
                             }
 
-        bss <- layout =<< (P.reverse <$> findSymbols)
+        (bss, bssLength) <- layout =<< (P.reverse <$> findSymbols)
 
         when (0 /= P.length bss) $ do
             bssSecN <- getNextSectionN
@@ -579,7 +579,7 @@ assemble m = do
                     , esN         = bssSecN
                     , esLink      = 0
                     , esInfo      = 0
-                    , esData      = ElfSectionData empty
+                    , esData      = ElfSectionDataNoBits $ fromIntegral bssLength
                     }
 
             let
