@@ -144,12 +144,6 @@ testBss = mdo
         stackSize = 256
 
     _something <- allocateBSS 8 256
-
-    bss <- getBssSectionSymbol
-
-    adrp x20 bss
-    add x20 x20 $ LO12 bss
-
     stack <- allocateBSS 8 stackSize
 
     adrp x19 stack

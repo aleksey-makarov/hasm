@@ -41,7 +41,6 @@ module Asm.Asm
     , Visibility (..)
     , allocate
     , allocateBSS
-    , getBssSectionSymbol
 
     , ascii, asciiz
     , byte, short, word, long
@@ -130,7 +129,6 @@ data SymbolTableItem c
     | SymbolTableItemElfSymbol
         { stiElfSymbol :: ElfSymbolXX c
         }
-    | SymbolTableItemBssSectionSymbol
 
 data RelocationTableItem a
     = RelocationTableItem
@@ -149,13 +147,11 @@ data CodeState a
         , symbolsNext           :: Int
         , symbolsReversed       :: [SymbolTableItem (ArchElfClass a)]
 
-        , bssSectionSymbol      :: Maybe Symbol
-
         , relocations           :: [RelocationTableItem a]
         }
 
 codeStateInit :: CodeState a
-codeStateInit = CodeState 0 [] 0 [] 0 [] Nothing []
+codeStateInit = CodeState 0 [] 0 [] 0 [] []
 
 offset :: MonadState (CodeState a) m => m SectionOffset
 offset = gets textOffset
@@ -292,27 +288,7 @@ allocate stiDataUVisibility stiDataUAccess stiDataUAlignment stiDataUData =
             Global _ -> addSymbolGlobal s
 
 allocateBSS :: MonadState (CodeState a) m => Int -> Int -> m Symbol
-allocateBSS alignment size = do
-    void $ getBssSectionSymbol
-    allocate Local RW alignment $ Uninitialized size
-
-setBssSectionSymbol :: MonadState (CodeState a) m => Symbol -> m ()
-setBssSectionSymbol s = modify f where
-        f CodeState {..} =
-            CodeState
-                { bssSectionSymbol = Just s
-                , ..
-                }
-
-getBssSectionSymbol :: MonadState (CodeState a) m => m Symbol
-getBssSectionSymbol = do
-    bssSymbol <- gets bssSectionSymbol
-    case bssSymbol of
-        Nothing -> do
-            s <- addSymbolLocal SymbolTableItemBssSectionSymbol
-            setBssSectionSymbol s
-            return s
-        Just s -> return s
+allocateBSS alignment size = allocate Local RW alignment $ Uninitialized size
 
 --------------------------------------------------------------------------------
 -- pool
@@ -590,58 +566,40 @@ assemble m = do
 
         bss <- layout =<< (P.reverse <$> findSymbols)
 
-        case bssSectionSymbol of
-            Nothing -> return ()
-            Just _ -> do
+        when (0 /= P.length bss) $ do
+            bssSecN <- getNextSectionN
+            addNewSection
+                ElfSection
+                    { esName      = ".bss"
+                    , esType      = SHT_NOBITS
+                    , esFlags     = SHF_WRITE .|. SHF_ALLOC
+                    , esAddr      = 0
+                    , esAddrAlign = 8 -- FIXME: arch-specific?
+                    , esEntSize   = 0
+                    , esN         = bssSecN
+                    , esLink      = 0
+                    , esInfo      = 0
+                    , esData      = ElfSectionData empty
+                    }
 
-                -- when (0 /= P.length bss) $ do
-
-                bssSecN <- getNextSectionN
-                addNewSection
-                    ElfSection
-                        { esName      = ".bss"
-                        , esType      = SHT_NOBITS
-                        , esFlags     = SHF_WRITE .|. SHF_ALLOC
-                        , esAddr      = 0
-                        , esAddrAlign = 8 -- FIXME: arch-specific?
-                        , esEntSize   = 0
-                        , esN         = bssSecN
-                        , esLink      = 0
-                        , esInfo      = 0
-                        , esData      = ElfSectionData empty
-                        }
-
-                let
-                    accumFunc :: IsElfClass c => SymbolTableItem c -> Int -> SymbolTableItem c
-                    accumFunc SymbolTableItemDataUnallocated { .. } n =
-                        SymbolTableItemElfSymbol $ ElfSymbolXX { .. }
-                            where
-                                (steName, steBind) = case stiDataUVisibility of
-                                    Local       -> (mkSymbolName "bss" n, STB_Local)
-                                    Global name -> (name, STB_Global)
-                                steType  = STT_Object
-                                steShNdx = bssSecN
-                                steValue = fromIntegral n
-                                steSize  = fromIntegral $ dataSize stiDataUData
-                    accumFunc _ _ = error "internal error: FIXME"
-
-                    modifySymbolsFunction :: IsElfClass c => Array Int (SymbolTableItem c) -> Array Int (SymbolTableItem c)
-                    modifySymbolsFunction a = accum accumFunc a bss
-
-                    fixBssTableSymbol :: IsElfClass c => SymbolTableItem c-> SymbolTableItem c
-                    fixBssTableSymbol SymbolTableItemBssSectionSymbol =
-                        let
-                            steName  = ""
-                            steBind  = STB_Local
-                            steType  = STT_Section
+            let
+                accumFunc :: IsElfClass c => SymbolTableItem c -> Int -> SymbolTableItem c
+                accumFunc SymbolTableItemDataUnallocated { .. } n =
+                    SymbolTableItemElfSymbol $ ElfSymbolXX { .. }
+                        where
+                            (steName, steBind) = case stiDataUVisibility of
+                                Local       -> (mkSymbolName "bss" n, STB_Local)
+                                Global name -> (name, STB_Global)
+                            steType  = STT_Object
                             steShNdx = bssSecN
-                            steValue = 0
-                            steSize  = 0
-                        in
-                            SymbolTableItemElfSymbol $ ElfSymbolXX { .. }
-                    fixBssTableSymbol s = s
+                            steValue = fromIntegral n
+                            steSize  = fromIntegral $ dataSize stiDataUData
+                accumFunc _ _ = error "internal error: FIXME"
 
-                modifySymbols $ amap fixBssTableSymbol . modifySymbolsFunction
+                modifySymbolsFunction :: IsElfClass c => Array Int (SymbolTableItem c) -> Array Int (SymbolTableItem c)
+                modifySymbolsFunction a = accum accumFunc a bss
+
+            modifySymbols modifySymbolsFunction
 
         ---------------------------------------------------------------------
         -- symbols
@@ -673,7 +631,6 @@ assemble m = do
                     ElfSymbolXX { .. }
             fSymbol SymbolTableItemElfSymbol { .. } = stiElfSymbol
             fSymbol SymbolTableItemDataUnallocated {} = error "internal error: SymbolTableItemDataUnallocated"
-            fSymbol SymbolTableItemBssSectionSymbol =  error "internal error: SymbolTableItemBssSectionSymbol"
 
             numLocal = fromIntegral symbolsLocalNext
 
