@@ -17,6 +17,12 @@ import Asm.AArch64
 sysExit :: Word16
 sysExit = 93
 
+sysWrite :: Word16
+sysWrite = 64
+
+sysRead :: Word16
+sysRead = 63
+
 testBss :: (CodeMonad AArch64 m, MonadFix m) => m ()
 testBss = mdo
 
@@ -108,13 +114,17 @@ testBss = mdo
     mainx <- label
     -------------------------------------------------------
 
+    let
+        stringSize = 8 * 2 + 1
+    string <- allocateBSS 0 stringSize
+
     stp x29 x30 $ PPreIndex sp (-32)
     movz w2 $ LSL0 0x11
     movz w0 $ LSL0 0x0
     movsp x29 sp
     str x19 $ UnsignedOffset sp 16
-    adrp x19 (0 :: Word32) -- FIXME: relocation here
-    add x19 x19 $ Immediate 0 -- FIXME: relocation here
+    adrp x19 string
+    add x19 x19 $ LO12 string
     mov x1 x19
     bl readSyscall
     add x1 x19 $ Immediate 0x14
@@ -140,16 +150,8 @@ testBss = mdo
     void $ labelExtern "_start"
     -------------------------------------------------------
 
-    let
-        stackSize = 256
-
-    _something <- allocateBSS 8 256
-    stack <- allocateBSS 8 stackSize
-
-    adrp x19 stack
-    add x19 x19 $ LO12 stack
-
     bl mainx
+
     movz x0 $ LSL0 0
     movz x8 $ LSL0 sysExit
     svc 0
@@ -158,10 +160,14 @@ testBss = mdo
     writeSyscall <- label
     -------------------------------------------------------
 
+    movz x8 $ LSL0 sysWrite
+    svc 0
     ret x30
 
     -------------------------------------------------------
     readSyscall <- label
     -------------------------------------------------------
 
+    movz x8 $ LSL0 sysRead
+    svc 0
     ret x30

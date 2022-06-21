@@ -6,6 +6,9 @@ aarch64-unknown-linux-gnu-gdb ./tests/test_bss.gcc
 qemu-aarch64 -g 11111 ./tests/out/testBss.gcc
 aarch64-unknown-linux-gnu-gdb ./tests/out/testBss.gcc
 
+qemu-aarch64 -g 11111 ./tests/out/forwardLabel.gcc
+aarch64-unknown-linux-gnu-gdb ./tests/out/forwardLabel.gcc
+
 rm ./tests/out/*.o.dump.golden
 rm ./tests/out/testBss.o.dump.golden
 cabal new-test --test-show-details=direct

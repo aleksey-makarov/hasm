@@ -17,7 +17,10 @@
 
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
+-- https://github.com/ARM-software/abi-aa
 -- https://github.com/ARM-software/abi-aa/blob/main/aaelf64/aaelf64.rst
+-- https://docs.microsoft.com/en-us/cpp/build/arm64-windows-abi-conventions?view=msvc-170
+-- https://github.com/torvalds/linux/blob/v4.17/include/uapi/asm-generic/unistd.h
 
 module Asm.AArch64
     ( AArch64
@@ -728,6 +731,7 @@ mkRelocationAArch64 ::
                 SectionOffset -> -- s (is the address of the symbol)
                         Int64 -> -- a (the addend for the relocation)
                                  m (RelocationMonad ())
+-- see also AArch64 ABI 6.3.1, "Use of IP0 and IP1 by the linker" for JUMP26 and CALL26
 mkRelocationAArch64 R_AARCH64_JUMP26 p@(SectionOffset p') (SectionOffset s) a = do
     let
         x = (s + a - p') `shiftR` 2
