@@ -18,8 +18,8 @@ import System.Process
 import Test.Tasty
 import Test.Tasty.Golden
 import Test.Tasty.HUnit
--- import Test.Tasty.QuickCheck
--- import Test.QuickCheck.Monadic as QC.Monadic
+import Test.Tasty.QuickCheck
+import Test.QuickCheck.Monadic as QC.Monadic
 
 import Asm.Asm
 import Asm.AArch64
@@ -104,19 +104,20 @@ testExe name code maybeExpectedString =
 --------------------------------------------------
 --
 
--- prop_sum :: (Word32, Word32) -> Property
--- prop_sum (aw, bw) = monadicIO $ do
---     retString <- run $ runExe (".." </> "test_bss.gcc") (printWord32 aw ++ " " ++ printWord32 bw)
---     QC.Monadic.assert (aw + bw == readWord32 retString)
---
--- testPropSum :: TestTree
--- testPropSum = testProperty "bssExample_testProperty" prop_sum
+prop_sum :: (Word32, Word32) -> Property
+prop_sum (aw, bw) = monadicIO $ do
+    retString <- run $ runExe "testBss.gcc" (printWord32 aw ++ " " ++ printWord32 bw)
+    QC.Monadic.assert (aw + bw == readWord32 retString)
+
+testPropSum :: TestTree
+testPropSum = testProperty "bssExample_testProperty" prop_sum
 
 testExeBss :: [ TestTree ]
 testExeBss = [ testCase mkObjTestName $ mkObj name testBss
              , after AllSucceed mkObjTestName $ testGroup checkObjTestName
                 [ goldenVsFile dumpObjTestName dumpGoldenName dumpOutName mkDump
                 , testCase mkGccLdTestName $ ldGcc name
+                , after AllSucceed mkGccLdTestName testPropSum
                 ]
              ]
     where
@@ -161,5 +162,4 @@ main = defaultMain $ testGroup "tests" $ testFitN :
     ++ testExe "forwardLabel" forwardLabel (Just "ok\n")
     ++ testExe "dontRun"      dontRun      Nothing
     ++ testExeBss
-    -- ++ [ testPropSum ]
     )
