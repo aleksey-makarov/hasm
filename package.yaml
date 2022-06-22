@@ -33,7 +33,7 @@ library:
     - Asm.Asm
     - Asm.AArch64
     - Asm.Data
-    - Asm.DummyLd
+    - Asm.Ld
   other-modules:
     - Asm.Relocation
 

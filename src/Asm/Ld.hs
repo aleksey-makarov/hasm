@@ -6,7 +6,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Asm.DummyLd (dummyLd) where
+module Asm.Ld (ld) where
 
 import Control.Monad.Catch
 import Data.Bits
@@ -30,8 +30,8 @@ getMachineConfig EM_AARCH64 = return $ MachineConfig 0x400000 0x10000
 getMachineConfig EM_X86_64  = return $ MachineConfig 0x400000 0x1000
 getMachineConfig _          = $chainedError "could not find machine config for this arch"
 
-dummyLd' :: forall a m . (MonadThrow m, IsElfClass a) => ElfList a -> m (ElfList a)
-dummyLd' (ElfList es) = do
+ld' :: forall a m . (MonadThrow m, IsElfClass a) => ElfList a -> m (ElfList a)
+ld' (ElfList es) = do
 
     txtSection <- elfFindSectionByName es ".text"
     txtSectionData <- case txtSection of
@@ -65,8 +65,6 @@ dummyLd' (ElfList es) = do
                 ]
         _ -> $chainedError "could not find ELF header"
 
--- | @dummyLd@ places the content of ".text" section of the input ELF
--- into the loadable segment of the resulting ELF.
--- This could work if there are no relocations or references to external symbols.
-dummyLd :: MonadThrow m => Elf -> m Elf
-dummyLd (c :&: l) = (c :&:) <$> withElfClass c dummyLd' l
+-- | Simple static linker
+ld :: MonadThrow m => Elf -> m Elf
+ld (c :&: l) = (c :&:) <$> withElfClass c ld' l

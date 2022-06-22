@@ -12,7 +12,7 @@ import System.Posix.Files
 
 import Paths_hasm
 
-import Asm.DummyLd
+import Asm.Ld
 
 data Options
   = GoLink
@@ -51,10 +51,10 @@ main' PrintVersion = putStrLn $ showVersion version
 main' PrintType = undefined
 
 main' (GoLink inf outf) = do
-  readFileStrict inf >>= parseElf >>= dummyLd >>= serializeElf >>= BSL.writeFile outf
+  readFileStrict inf >>= parseElf >>= ld >>= serializeElf >>= BSL.writeFile outf
   makeFileExecutable outf
 
-makeFileExecutable :: String -> IO ()
+makeFileExecutable :: FilePath -> IO ()
 makeFileExecutable path = do
     m <- fileMode <$> getFileStatus path
     setFileMode path $ m .|. ownerExecuteMode
