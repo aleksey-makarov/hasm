@@ -24,6 +24,7 @@ library:
     - bytestring
     - exception-context-th
     - exceptions
+    - lens
     - melf
     - mtl
     - singletons
