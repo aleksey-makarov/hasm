@@ -154,15 +154,15 @@ data RelocationTableItem a
 
 data CodeState a
     = CodeState
-        { textOffset            :: SectionOffset   -- Should always be aligned by instructionSize
-        , textReversed          :: [TextChunk a]
+        { _textOffset            :: SectionOffset   -- Should always be aligned by instructionSize
+        , _textReversed          :: [TextChunk a]
 
-        , symbolsLocalNext      :: Int
-        , symbolsLocalReversed  :: [SymbolTableItem (ArchElfClass a)]
-        , symbolsNext           :: Int
-        , symbolsReversed       :: [SymbolTableItem (ArchElfClass a)]
+        , _symbolsLocalNext      :: Int
+        , _symbolsLocalReversed  :: [SymbolTableItem (ArchElfClass a)]
+        , _symbolsNext           :: Int
+        , _symbolsReversed       :: [SymbolTableItem (ArchElfClass a)]
 
-        , relocations           :: [RelocationTableItem a]
+        , _relocations           :: [RelocationTableItem a]
         }
 
 data ElfCompositionState c
@@ -180,33 +180,30 @@ data SymbolAllocationInfo tag
         }
 
 makeLenses ''ElfCompositionState
+makeLenses ''CodeState
+
+push :: MonadState s m => Lens' s [a] -> a -> m ()
+push l v = l %= (v :)
+
+overM :: MonadState s m => Lens' s a -> (a -> m a) -> m ()
+overM l f = use l >>= f >>= assign l
 
 codeStateInit :: CodeState a
 codeStateInit = CodeState 0 [] 0 [] 0 [] []
 
 offset :: MonadState (CodeState a) m => m SectionOffset
-offset = gets textOffset
+offset = use textOffset
 
 --------------------------------------------------------------------------------
 -- text
 
 addRelocation :: (KnownArch a, CodeMonad a m) => RelocationTableItem a -> m ()
-addRelocation c = modify f where
-    f CodeState {..} =
-        CodeState { relocations = c : relocations
-                  , ..
-                  }
+addRelocation c = push relocations c
 
 emitChunk :: (KnownArch a, CodeMonad a m) => TextChunk a -> m SectionOffset
-emitChunk c = state f where
-    f CodeState {..} =
-        ( textOffset
-        , CodeState { textReversed = c : textReversed
-                    , textOffset = l + textOffset
-                    , ..
-                    }
-        )
-    l = case c of
+emitChunk c = do
+    push textReversed c
+    textOffset <<+= case c of
         InstructionChunk i -> instructionSize i
         BuilderChunk i _ -> fromIntegral i
 
@@ -253,16 +250,8 @@ ltorg' = do
             align' stiTxtUAlign
             SymbolTableItemTxt Nothing <$> emitBuilder stiTxtULength stiTxtUData
         f x = return x
-    symbols'      <- mapM f =<< gets symbolsReversed
-    symbolsLocal' <- mapM f =<< gets symbolsLocalReversed
-    let
-        fm CodeState { .. } =
-            CodeState
-                { symbolsReversed = symbols'
-                , symbolsLocalReversed = symbolsLocal'
-                , ..
-                }
-    modify fm
+    overM symbolsReversed (mapM f)
+    overM symbolsLocalReversed (mapM f)
 
 ltorg :: forall a m . (KnownArch a, CodeMonad a m) => m ()
 ltorg = ltorg' >> align' (ltorgAlign (Proxy @a))
@@ -276,26 +265,14 @@ dataSize (Uninitialized i) = i
 dataSize (Initialized bs) = fromIntegral $ BSL.length bs
 
 addSymbolGlobal :: MonadState (CodeState a) m => SymbolTableItem (ArchElfClass a) -> m Symbol
-addSymbolGlobal newSymbolItem = state f where
-    f CodeState {..} =
-        ( SymbolGlobal symbolsNext
-        , CodeState
-            { symbolsNext = 1 + symbolsNext
-            , symbolsReversed = newSymbolItem : symbolsReversed
-            , ..
-            }
-        )
+addSymbolGlobal newSymbolItem = do
+    push symbolsReversed newSymbolItem
+    SymbolGlobal <$> (symbolsNext <<+= 1)
 
 addSymbolLocal :: MonadState (CodeState a) m => SymbolTableItem (ArchElfClass a) -> m Symbol
-addSymbolLocal newSymbolItem = state f where
-    f CodeState {..} =
-        ( SymbolLocal symbolsLocalNext
-        , CodeState
-            { symbolsLocalNext = 1 + symbolsLocalNext
-            , symbolsLocalReversed = newSymbolItem : symbolsLocalReversed
-            , ..
-            }
-        )
+addSymbolLocal newSymbolItem = do
+    push symbolsLocalReversed newSymbolItem
+    SymbolLocal <$> (symbolsLocalNext <<+= 1)
 
 allocate :: MonadState (CodeState a) m => Visibility -> Access -> Int -> Data -> m Symbol
 allocate stiDataUVisibility stiDataUAccess stiDataUAlignment stiDataUData =
@@ -390,9 +367,6 @@ layout sais =
 --
 -----------------------------------------
 
-push :: MonadState s m => Lens' s [a] -> a -> m ()
-push l v = l %= (v :)
-
 getNextSectionN :: MonadState (ElfCompositionState a) m => m ElfSectionIndex
 getNextSectionN = ecsNextSectionN <<+= 1
 
@@ -429,7 +403,7 @@ assemble m = do
                     , ehEntry      = 0
                     , ehFlags      = 0
                     }
-                symbols = P.reverse symbolsLocalReversed ++ P.reverse symbolsReversed
+                symbols = P.reverse _symbolsLocalReversed ++ P.reverse _symbolsReversed
                 symbolsArray = listArray (0, P.length symbols - 1) symbols
 
     ElfCompositionState { .. } <- flip execStateT elfCompositionStateInit $ do
@@ -439,11 +413,11 @@ assemble m = do
         ---------------------------------------------------------------------
 
         let
-            text = P.reverse textReversed
+            text = P.reverse _textReversed
 
             symbolToSymbolTableIndex :: Symbol -> Int
             symbolToSymbolTableIndex (SymbolLocal i) = i
-            symbolToSymbolTableIndex (SymbolGlobal i) = i + symbolsLocalNext
+            symbolToSymbolTableIndex (SymbolGlobal i) = i + _symbolsLocalNext
 
             getSymbolTableItem :: MonadState (ElfCompositionState (ArchElfClass a)) m' =>
                 Symbol -> m' (SymbolTableItem (ArchElfClass a))
@@ -459,7 +433,7 @@ assemble m = do
                     SymbolTableItemTxt { .. } -> Just <$> mkRelocation @a lrRelocation lrAddress stiTxtOffset 0
                     _ -> return Nothing
 
-        (reloc, relocTxt) <- splitMapReverseM fTxtReloc relocations
+        (reloc, relocTxt) <- splitMapReverseM fTxtReloc _relocations
 
         let
             fTxt :: TextChunk a -> Builder
@@ -614,7 +588,7 @@ assemble m = do
             fSymbol SymbolTableItemElfSymbol { .. } = stiElfSymbol
             fSymbol SymbolTableItemDataUnallocated {} = error "internal error: SymbolTableItemDataUnallocated"
 
-            numLocal = fromIntegral symbolsLocalNext
+            numLocal = fromIntegral _symbolsLocalNext
 
         symbolTable <- (fmap fSymbol . elems) <$> use ecsSymbols
 
