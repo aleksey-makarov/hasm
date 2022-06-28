@@ -33,37 +33,61 @@ getMachineConfig _          = $chainedError "could not find machine config for t
 ld' :: forall a m . (MonadThrow m, IsElfClass a) => ElfList a -> m (ElfList a)
 ld' (ElfList es) = do
 
+    ElfHeader { .. } <- elfFindHeader es
+
     txtSection <- elfFindSectionByName es ".text"
     txtSectionData <- case txtSection of
         ElfSection { esData = ElfSectionData textData } -> return textData
         _ -> $chainedError "could not find correct \".text\" section"
 
-    header <- elfFindHeader es
-    case header of
-        ElfHeader { .. } -> do
-            MachineConfig { .. } <- getMachineConfig ehMachine
-            return $ ElfList
-                [ ElfSegment
-                    { epType       = PT_LOAD
-                    , epFlags      = PF_X .|. PF_R
-                    , epVirtAddr   = mcAddress
-                    , epPhysAddr   = mcAddress
-                    , epAddMemSize = 0
-                    , epAlign      = mcAlign
-                    , epData       =
-                        [ ElfHeader
-                            { ehType  = ET_EXEC
-                            , ehEntry = mcAddress + headerSize (fromSing $ sing @a)
-                            , ..
-                            }
-                        , ElfRawData
-                            { edData = txtSectionData
-                            }
-                        ]
+    ------------------------------------
+    -- allocate sections
+    ------------------------------------
+
+
+    ------------------------------------
+    -- relocate .text
+    ------------------------------------
+
+    -- find relocation section
+
+    -- let
+    --     relocateFunction :: []
+    --     relocateFunction = undefined
+
+    -- relaSectionData <- case elfFindSectionByName es ".rela.text" of
+    --     Just (ElfSection { esData = ElfSectionData relaSectionData }) -> (relaSection', relaSectionData')
+    --     _ -> undefined
+
+    -- parseBList 
+
+    ------------------------------------
+    -- create elf
+    ------------------------------------
+
+    MachineConfig { .. } <- getMachineConfig ehMachine
+
+    return $ ElfList
+        [ ElfSegment
+            { epType       = PT_LOAD
+            , epFlags      = PF_X .|. PF_R
+            , epVirtAddr   = mcAddress
+            , epPhysAddr   = mcAddress
+            , epAddMemSize = 0
+            , epAlign      = mcAlign
+            , epData       =
+                [ ElfHeader
+                    { ehType  = ET_EXEC
+                    , ehEntry = mcAddress + headerSize (fromSing $ sing @a)
+                    , ..
                     }
-                , ElfSegmentTable
+                , ElfRawData
+                    { edData = txtSectionData
+                    }
                 ]
-        _ -> $chainedError "could not find ELF header"
+            }
+        , ElfSegmentTable
+        ]
 
 -- | Simple static linker
 ld :: MonadThrow m => Elf -> m Elf
