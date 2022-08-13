@@ -168,7 +168,7 @@ data CodeState a
 data ElfCompositionState c
     = ElfCompositionState
         { _ecsNextSectionN :: ElfSectionIndex
-        , _ecsElfReversed  :: [ElfXX c]
+        , _ecsElfReversed  :: ElfListXX c
         , _ecsSymbols      :: Array Int (SymbolTableItem c)
         }
 
@@ -184,6 +184,15 @@ makeLenses ''CodeState
 
 push :: MonadState s m => Lens' s [a] -> a -> m ()
 push l v = l %= (v :)
+
+pushElf :: MonadState s m => Lens' s (ElfListXX c) -> ElfXX t c -> m ()
+pushElf l v = l %= (v ~:)
+
+reverseElf :: ElfListXX c -> ElfListXX c
+reverseElf l = reverseElf' l ElfListNull
+    where
+        reverseElf'  ElfListNull       a = a
+        reverseElf' (ElfListCons e es) a = reverseElf' es (e ~: a)
 
 overM :: MonadState s m => Lens' s a -> (a -> m a) -> m ()
 overM l f = use l >>= f >>= assign l
@@ -370,8 +379,8 @@ layout sais =
 getNextSectionN :: MonadState (ElfCompositionState a) m => m ElfSectionIndex
 getNextSectionN = ecsNextSectionN <<+= 1
 
-addNewSection :: MonadState (ElfCompositionState a) m => ElfXX a -> m ()
-addNewSection e = push ecsElfReversed e
+addNewSection :: MonadState (ElfCompositionState a) m => ElfXX t a -> m ()
+addNewSection e = pushElf ecsElfReversed e
 
 splitMapReverseM :: Monad m => (a -> m (Maybe b)) -> [a] -> m ([a], [b])
 splitMapReverseM f l = foldlM f' ([], []) l
@@ -392,7 +401,7 @@ assemble m = do
 
     let
         elfCompositionStateInit :: ElfCompositionState (ArchElfClass a)
-        elfCompositionStateInit = ElfCompositionState 1 [h] symbolsArray
+        elfCompositionStateInit = ElfCompositionState 1 (h ~: ElfListNull) symbolsArray
             where
                 h = ElfHeader
                     { ehData       = ELFDATA2LSB -- FIXME: Wrong
@@ -665,4 +674,4 @@ assemble m = do
 
         addNewSection ElfSectionTable
 
-    return $ sing :&: (ElfList $ P.reverse _ecsElfReversed)
+    return $ sing :&: (reverseElf _ecsElfReversed)

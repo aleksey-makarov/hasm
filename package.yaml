@@ -9,8 +9,8 @@ copyright: Aleksey Makarov
 license: BSD3
 homepage: https://github.com/aleksey-makarov/hasm
 dependencies:
-  - base >=4.6 && <5.0
-tested-with: GHC == 8.10.7
+  - base
+tested-with: GHC == 9.2.4
 ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wno-redundant-constraints
 extra-doc-files:
     - ChangeLog.md
@@ -28,7 +28,8 @@ library:
     - melf
     - mtl
     - singletons
-    - template-haskell >= 2.16 && < 2.17
+    - singletons-th
+    - template-haskell
   source-dirs: src
   exposed-modules:
     - Asm.Asm
@@ -66,5 +67,5 @@ executables:
       - bytestring
       - hasm
       - melf
-      - optparse-applicative >= 0.16.1 && < 0.17
+      - optparse-applicative
       - unix
