@@ -35,7 +35,7 @@ library:
     - Asm.Asm
     - Asm.AArch64
     - Asm.Data
-    - Asm.Ld
+    - Asm.LdDummy
   other-modules:
     - Asm.Relocation
 
@@ -59,8 +59,8 @@ tests:
       - unix
 
 executables:
-  hld:
-    main: hld.hs
+  hlddummy:
+    main: hlddummy.hs
     source-dirs: app
     ghc-options: -fno-warn-unused-do-bind -threaded -rtsopts -with-rtsopts=-N
     dependencies:

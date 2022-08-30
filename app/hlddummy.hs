@@ -12,7 +12,7 @@ import System.Posix.Files
 
 import Paths_hasm
 
-import Asm.Ld
+import Asm.LdDummy
 
 data Options
   = GoLink
@@ -51,7 +51,7 @@ main' PrintVersion = putStrLn $ showVersion version
 main' PrintType = undefined
 
 main' (GoLink inf outf) = do
-  readFileStrict inf >>= parseElf >>= ld >>= serializeElf >>= BSL.writeFile outf
+  readFileStrict inf >>= parseElf >>= ldDummy >>= serializeElf >>= BSL.writeFile outf
   makeFileExecutable outf
 
 makeFileExecutable :: FilePath -> IO ()

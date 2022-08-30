@@ -24,7 +24,7 @@ import Test.QuickCheck.Monadic as QC.Monadic
 import Asm.Asm
 import Asm.AArch64
 import Asm.Data
-import Asm.Ld
+import qualified Asm.LdDummy as LD
 
 import Code.AArch64.HelloWorld
 import Code.AArch64.ForwardLabel
@@ -55,7 +55,7 @@ mkObj name code = assemble code >>= serializeElf >>= BSL.writeFile n
 
 ldDummy :: String -> IO ()
 ldDummy name = do
-    readFileStrict i >>= parseElf >>= ld >>= serializeElf >>= BSL.writeFile o
+    readFileStrict i >>= parseElf >>= LD.ldDummy >>= serializeElf >>= BSL.writeFile o
     makeFileExecutable o
     where
         i = testsOutDir </> name <.> "o"

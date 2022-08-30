@@ -6,7 +6,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Asm.Ld (ld) where
+module Asm.LdDummy (ldDummy) where
 
 import Control.Monad.Catch
 import Data.Bits
@@ -64,5 +64,5 @@ ld' es = do
         ~: ElfListNull
 
 -- | Simple static linker
-ld :: MonadThrow m => Elf -> m Elf
-ld (c :&: l) = (c :&:) <$> withElfClass c ld' l
+ldDummy :: MonadThrow m => Elf -> m Elf
+ldDummy (c :&: l) = (c :&:) <$> withElfClass c ld' l
