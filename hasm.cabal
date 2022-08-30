@@ -52,8 +52,8 @@ library
     , template-haskell
   default-language: Haskell2010
 
-executable hlddummy
-  main-is: hlddummy.hs
+executable hld
+  main-is: hld.hs
   other-modules:
       Paths_hasm
   hs-source-dirs:
@@ -62,6 +62,7 @@ executable hlddummy
   build-depends:
       base
     , bytestring
+    , exceptions
     , hasm
     , melf
     , optparse-applicative

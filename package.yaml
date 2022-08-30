@@ -59,12 +59,13 @@ tests:
       - unix
 
 executables:
-  hlddummy:
-    main: hlddummy.hs
+  hld:
+    main: hld.hs
     source-dirs: app
     ghc-options: -fno-warn-unused-do-bind -threaded -rtsopts -with-rtsopts=-N
     dependencies:
       - bytestring
+      - exceptions
       - hasm
       - melf
       - optparse-applicative
