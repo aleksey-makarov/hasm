@@ -69,4 +69,5 @@ executables:
       - hasm
       - melf
       - optparse-applicative
+      - singletons
       - unix
