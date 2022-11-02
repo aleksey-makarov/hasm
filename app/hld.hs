@@ -7,7 +7,6 @@ import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import Data.Elf
-import Data.Singletons
 import Data.Version
 import Options.Applicative
 import System.Posix.Files
@@ -16,7 +15,7 @@ import Paths_hasm
 
 data Options
   = GoLink
-    { optFrom :: [String]
+    { optFrom :: String
     , optTo   :: String
     }
   | PrintType
@@ -24,8 +23,8 @@ data Options
 
 optsGoLink :: Parser Options
 optsGoLink = do
+  optFrom <- argument str (metavar "INPUT_FILE")
   optTo   <- argument str (metavar "OUTPUT_FILE")
-  optFrom <- some $ argument str (metavar "INPUT_FILES...")
   pure GoLink {..}
 
 optsPrintType :: Parser Options
@@ -41,12 +40,8 @@ opts = info (optsGoLink <|> optsPrintType <|> optsPrintVersion <**> helper)
   <> header "hld - linker"
   )
 
-ld :: Sing a -> [ElfListXX a] -> ElfListXX a
+ld :: MonadThrow m => Elf -> m Elf
 ld = undefined
-
-ld' :: MonadThrow m => [Elf] -> m Elf
-ld' (e : _) = return e -- FIXME:
-ld' [] = error "Internal error, should not happen (`some` was used in parser)"
 
 main :: IO ()
 main = execParser opts >>= main'
@@ -55,11 +50,11 @@ main' :: Options -> IO ()
 
 main' PrintVersion = putStrLn $ showVersion version
 
-main' PrintType = putStrLn "Not implemented"
+main' PrintType = undefined
 
-main' GoLink { .. } = do
-  mapM (\ x -> readFileStrict x >>= parseElf) optFrom >>= ld' >>= serializeElf >>= BSL.writeFile optTo
-  makeFileExecutable optTo
+main' (GoLink inf outf) = do
+  readFileStrict inf >>= parseElf >>= ld >>= serializeElf >>= BSL.writeFile outf
+  makeFileExecutable outf
 
 makeFileExecutable :: FilePath -> IO ()
 makeFileExecutable path = do
