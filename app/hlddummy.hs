@@ -2,7 +2,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-import Control.Monad.Catch
 import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
@@ -12,6 +11,8 @@ import Options.Applicative
 import System.Posix.Files
 
 import Paths_hasm
+
+import Asm.LdDummy
 
 data Options
   = GoLink
@@ -40,9 +41,6 @@ opts = info (optsGoLink <|> optsPrintType <|> optsPrintVersion <**> helper)
   <> header "hld - linker"
   )
 
-ld :: MonadThrow m => Elf -> m Elf
-ld = undefined
-
 main :: IO ()
 main = execParser opts >>= main'
 
@@ -53,7 +51,7 @@ main' PrintVersion = putStrLn $ showVersion version
 main' PrintType = undefined
 
 main' (GoLink inf outf) = do
-  readFileStrict inf >>= parseElf >>= ld >>= serializeElf >>= BSL.writeFile outf
+  readFileStrict inf >>= parseElf >>= ldDummy >>= serializeElf >>= BSL.writeFile outf
   makeFileExecutable outf
 
 makeFileExecutable :: FilePath -> IO ()
