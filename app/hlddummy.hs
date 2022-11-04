@@ -19,7 +19,6 @@ data Options
     { optFrom :: String
     , optTo   :: String
     }
-  | PrintType
   | PrintVersion
 
 optsGoLink :: Parser Options
@@ -28,17 +27,14 @@ optsGoLink = do
   optTo   <- argument str (metavar "OUTPUT_FILE")
   pure GoLink {..}
 
-optsPrintType :: Parser Options
-optsPrintType = flag' PrintType (short 't' <> long "type"  <> help "Print dhall type of configuration file")
-
 optsPrintVersion :: Parser Options
 optsPrintVersion = flag' PrintVersion (short 'v' <> long "version"  <> help "Print version")
 
 opts :: ParserInfo Options
-opts = info (optsGoLink <|> optsPrintType <|> optsPrintVersion <**> helper)
+opts = info (optsGoLink <|> optsPrintVersion <**> helper)
   (  fullDesc
   <> progDesc "ELF object file linker"
-  <> header "hld - linker"
+  <> header "hlddummy - linker"
   )
 
 main :: IO ()
@@ -47,8 +43,6 @@ main = execParser opts >>= main'
 main' :: Options -> IO ()
 
 main' PrintVersion = putStrLn $ showVersion version
-
-main' PrintType = undefined
 
 main' (GoLink inf outf) = do
   readFileStrict inf >>= parseElf >>= ldDummy >>= serializeElf >>= BSL.writeFile outf
