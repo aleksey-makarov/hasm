@@ -41,28 +41,28 @@ symbol table section 3 ".symtab" {
         symbol "$text@48" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x0000000000000030
             Size:  0x0000000000000000
         }
         symbol "$text@44" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x000000000000002c
             Size:  0x0000000000000000
         }
         symbol "$text@24" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x0000000000000018
             Size:  0x0000000000000000
         }
         symbol "_start" {
             Bind:  STB_Global
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x0000000000000000
             Size:  0x0000000000000000
         }

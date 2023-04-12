@@ -10,8 +10,6 @@ module Asm.LdDummy (ldDummy) where
 
 import Control.Monad.Catch
 import Data.Bits
-import Data.Singletons
-import Data.Singletons.Sigma
 
 import Data.Elf
 import Data.Elf.Constants
@@ -25,12 +23,12 @@ data MachineConfig (a :: ElfClass)
                                 --   in physical memory (depends on max page size)
         }
 
-getMachineConfig :: (IsElfClass a, MonadThrow m) => ElfMachine -> m (MachineConfig a)
+getMachineConfig :: (SingElfClassI a, MonadThrow m) => ElfMachine -> m (MachineConfig a)
 getMachineConfig EM_AARCH64 = return $ MachineConfig 0x400000 0x10000
 getMachineConfig EM_X86_64  = return $ MachineConfig 0x400000 0x1000
 getMachineConfig _          = $chainedError "could not find machine config for this arch"
 
-ld' :: forall a m . (MonadThrow m, IsElfClass a) => ElfListXX a -> m (ElfListXX a)
+ld' :: forall a m . (MonadThrow m, SingElfClassI a) => ElfListXX a -> m (ElfListXX a)
 ld' es = do
 
     txtSection <- elfFindSectionByName es ".text"
@@ -52,7 +50,7 @@ ld' es = do
             , epData       =
                 ElfHeader
                     { ehType  = ET_EXEC
-                    , ehEntry = mcAddress + headerSize (fromSing $ sing @a)
+                    , ehEntry = mcAddress + headerSize (fromSingElfClass $ singElfClass @a)
                     , ..
                     }
                 ~: ElfRawData
@@ -65,4 +63,4 @@ ld' es = do
 
 -- | Simple static linker
 ldDummy :: MonadThrow m => Elf -> m Elf
-ldDummy (c :&: l) = (c :&:) <$> withElfClass c ld' l
+ldDummy (Elf c l) = Elf c <$> withSingElfClassI c ld' l

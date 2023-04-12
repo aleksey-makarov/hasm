@@ -68,8 +68,7 @@ import Data.Elf.Headers
 import Data.Foldable
 import Data.Int
 import Data.Kind
-import Data.Singletons.Sigma
-import Data.Singletons.TH
+import Data.Proxy
 import Data.Word
 
 import Asm.Data
@@ -346,7 +345,7 @@ long = word64
 --------------------------------------------------------------------------------
 -- assembler
 
-zeroIndexStringItem :: IsElfClass c => ElfSymbolXX c
+zeroIndexStringItem :: SingElfClassI c => ElfSymbolXX c
 zeroIndexStringItem = ElfSymbolXX "" 0 0 0 0 0
 
 -----------------------------------------
@@ -393,7 +392,7 @@ splitMapReverseM f l = foldlM f' ([], []) l
 mkSymbolName :: Show n => String -> n -> String
 mkSymbolName s n = "$" ++ s ++ "@" ++ show n -- FIXME: use hexadecimal
 
-assemble :: forall a m . (MonadCatch m, KnownArch a, IsElfClass (ArchElfClass a)) =>
+assemble :: forall a m . (MonadCatch m, KnownArch a, SingElfClassI (ArchElfClass a)) =>
                                                         StateT (CodeState a) m () -> m Elf
 assemble m = do
 
@@ -548,7 +547,7 @@ assemble m = do
                     }
 
             let
-                accumFunc :: IsElfClass c => SymbolTableItem c -> Int -> SymbolTableItem c
+                accumFunc :: SingElfClassI c => SymbolTableItem c -> Int -> SymbolTableItem c
                 accumFunc SymbolTableItemDataUnallocated { .. } n =
                     SymbolTableItemElfSymbol $ ElfSymbolXX { .. }
                         where
@@ -561,7 +560,7 @@ assemble m = do
                             steSize  = fromIntegral $ dataSize stiDataUData
                 accumFunc _ _ = error "internal error: FIXME"
 
-                modifySymbolsFunction :: IsElfClass c => Array Int (SymbolTableItem c) -> Array Int (SymbolTableItem c)
+                modifySymbolsFunction :: SingElfClassI c => Array Int (SymbolTableItem c) -> Array Int (SymbolTableItem c)
                 modifySymbolsFunction a = accum accumFunc a bss
 
             ecsSymbols %= modifySymbolsFunction
@@ -571,7 +570,7 @@ assemble m = do
         ---------------------------------------------------------------------
 
         let
-            fSymbol :: IsElfClass c => SymbolTableItem c -> ElfSymbolXX c
+            fSymbol :: SingElfClassI c => SymbolTableItem c -> ElfSymbolXX c
             -- This should have been allocated in ltorg'
             fSymbol SymbolTableItemTxtUnallocated {} = error "internal error: SymbolTableItemTxtUnallocated"
             fSymbol SymbolTableItemTxt { stiTxtName = Nothing, .. } =
@@ -614,7 +613,7 @@ assemble m = do
                 , esFlags     = 0
                 , esAddr      = 0
                 , esAddrAlign = 8
-                , esEntSize   = symbolTableEntrySize $ fromSing $ sing @(ArchElfClass a)
+                , esEntSize   = symbolTableEntrySize $ fromSingElfClass $ singElfClass @(ArchElfClass a)
                 , esN         = symtabSecN
                 , esLink      = fromIntegral strtabSecN
                 , esInfo      = numLocal + 1
@@ -658,7 +657,7 @@ assemble m = do
                 ElfSection
                     { esName      = ".rela.text"
                     , esType      = SHT_RELA
-                    , esFlags     = SHF_EXT 64 -- FIXME (SHF_INFO_LINK This section headers sh_info field holds a section header table index) https://docs.oracle.com/cd/E23824_01/html/819-0690/chapter6-94076.html#chapter6-10675
+                    , esFlags     = ElfSectionFlag 64 -- FIXME (SHF_INFO_LINK This section headers sh_info field holds a section header table index) https://docs.oracle.com/cd/E23824_01/html/819-0690/chapter6-94076.html#chapter6-10675
                     , esAddr      = 0
                     , esAddrAlign = 8
                     , esEntSize   = 0x18 -- FIXME
@@ -674,4 +673,4 @@ assemble m = do
 
         addNewSection ElfSectionTable
 
-    return $ sing :&: (reverseElf _ecsElfReversed)
+    return $ Elf singElfClass  (reverseElf _ecsElfReversed)

@@ -52,105 +52,105 @@ symbol table section 4 ".symtab" {
         symbol "$bss@0" {
             Bind:  STB_Local
             Type:  STT_Object
-            ShNdx: SHN_EXT 3
+            ShNdx: ElfSectionIndex 3
             Value: 0x0000000000000000
             Size:  0x000000000000000a
         }
         symbol "$bss@12" {
             Bind:  STB_Local
             Type:  STT_Object
-            ShNdx: SHN_EXT 3
+            ShNdx: ElfSectionIndex 3
             Value: 0x000000000000000c
             Size:  0x0000000000000004
         }
         symbol "$bss@16" {
             Bind:  STB_Local
             Type:  STT_Object
-            ShNdx: SHN_EXT 3
+            ShNdx: ElfSectionIndex 3
             Value: 0x0000000000000010
             Size:  0x0000000000000003
         }
         symbol "$bss@20" {
             Bind:  STB_Local
             Type:  STT_Object
-            ShNdx: SHN_EXT 3
+            ShNdx: ElfSectionIndex 3
             Value: 0x0000000000000014
             Size:  0x0000000000000002
         }
         symbol "$text@20" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x0000000000000014
             Size:  0x0000000000000000
         }
         symbol "$text@13" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x000000000000000d
             Size:  0x0000000000000000
         }
         symbol "$text@12" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x000000000000000c
             Size:  0x0000000000000000
         }
         symbol "$text@64" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x0000000000000040
             Size:  0x0000000000000000
         }
         symbol "$text@56" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x0000000000000038
             Size:  0x0000000000000000
         }
         symbol "$text@48" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x0000000000000030
             Size:  0x0000000000000000
         }
         symbol "$text@44" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x000000000000002c
             Size:  0x0000000000000000
         }
         symbol "$text@42" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x000000000000002a
             Size:  0x0000000000000000
         }
         symbol "$text@40" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x0000000000000028
             Size:  0x0000000000000000
         }
         symbol "$text@72" {
             Bind:  STB_Local
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x0000000000000048
             Size:  0x0000000000000000
         }
         symbol "_start" {
             Bind:  STB_Global
             Type:  STT_NoType
-            ShNdx: SHN_EXT 1
+            ShNdx: ElfSectionIndex 1
             Value: 0x0000000000000000
             Size:  0x0000000000000000
         }

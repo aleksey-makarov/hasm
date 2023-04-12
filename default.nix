@@ -6,24 +6,17 @@ let
   gccCross = pkgs.pkgsCross.aarch64-multiplatform.pkgsStatic.buildPackages.gcc;
   gdbCross = pkgs.pkgsCross.aarch64-multiplatform.buildPackages.gdb;
 
-  haskellPackages924 = pkgs.haskell.packages.ghc924;
-
   overrides = self : super : {
     exception-context-th = self.callCabal2nix "exception-context-th" sources.exception-context-th {};
     melf                 = self.callCabal2nix "melf"                 sources.melf                 {};
   };
 
-  source-overrides = {
-    singletons-base = "3.1";
-    singletons-th = "3.1";
-  };
-
 in
-  haskellPackages924.developPackage {
+  pkgs.haskellPackages.developPackage {
     root = ./.;
     modifier = drv:
       pkgs.haskell.lib.addBuildTools drv (
-        with haskellPackages924;
+        with pkgs.haskellPackages;
         [ cabal-install
           cabal2nix
           hpack
@@ -32,6 +25,5 @@ in
           gccCross
           gdbCross
         ]);
-    inherit source-overrides;
     inherit overrides;
   }
